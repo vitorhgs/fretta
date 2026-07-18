@@ -1,0 +1,4 @@
+project_id = "zaamyxkkzeyiwhuhbcyw"
+
+[functions.criar-motorista-auth]
+verify_jwt = false

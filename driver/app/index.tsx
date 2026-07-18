@@ -1,83 +1,41 @@
+import { useEffect } from "react";
+import { View, Text, StyleSheet, ActivityIndicator } from "react-native";
 import { useRouter } from "expo-router";
-import { useEffect, useState } from "react";
-import {
-  FlatList,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from "react-native";
-import { supabase } from "../supabase";
+import { useAuth } from "../contexts/AuthContext";
+import { colors } from "../theme/colors";
 
-export default function Home() {
+export default function Splash() {
   const router = useRouter();
-  const [rotas, setRotas] = useState<any[]>([]);
-  const [busca, setBusca] = useState("");
+  const { session, loading } = useAuth();
 
   useEffect(() => {
-    buscarRotas();
-  }, []);
+    if (loading) return;
 
-  const buscarRotas = async () => {
-    const { data } = await supabase
-      .from("rotas")
-      .select("*")
-      .order("created_at", { ascending: false });
+    const timer = setTimeout(() => {
+      if (session) {
+        router.replace("/home" as any);
+      } else {
+        router.replace("/login" as any);
+      }
+    }, 800);
 
-    if (data) setRotas(data);
-  };
-
-  const rotasFiltradas = rotas.filter((r) =>
-    r.nome.toLowerCase().includes(busca.toLowerCase())
-  );
+    return () => clearTimeout(timer);
+  }, [loading, session]);
 
   return (
     <View style={styles.container}>
-
-      {/* HEADER */}
-      <View style={styles.header}>
-        <TouchableOpacity>
-          <Text style={styles.voltar}>‹</Text>
-        </TouchableOpacity>
-
-        <Text style={styles.titulo}>Linhas</Text>
-
-        <View style={{ width: 20 }} />
+      <View style={styles.logoContainer}>
+        <View style={styles.logoIcon}>
+          <Text style={styles.logoIconText}>F</Text>
+        </View>
+        <Text style={styles.logoText}>Fretta</Text>
+        <Text style={styles.tagline}>DRIVER</Text>
       </View>
 
-      {/* BUSCA */}
-      <View style={styles.buscaContainer}>
-        <Text style={styles.lupa}>🔍</Text>
-        <TextInput
-          placeholder="Buscar linha"
-          value={busca}
-          onChangeText={setBusca}
-          style={styles.input}
-        />
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="small" color={colors.white} />
+        <Text style={styles.loadingText}>Carregando...</Text>
       </View>
-
-      {/* LISTA */}
-      <FlatList
-        data={rotasFiltradas}
-        keyExtractor={(item) => item.id}
-        renderItem={({ item }) => (
-          <TouchableOpacity
-            style={styles.card}
-            onPress={() =>
-              router.push({
-                pathname: "/navegacao",
-                params: { rotaId: item.id },
-              })
-            }
-          >
-            <Text style={styles.nome}>{item.nome}</Text>
-            <Text style={styles.sub}>
-              Ativo • Coleções
-            </Text>
-          </TouchableOpacity>
-        )}
-      />
     </View>
   );
 }
@@ -85,69 +43,57 @@ export default function Home() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#F3F4F6",
-    paddingTop: 60,
-    paddingHorizontal: 20,
+    backgroundColor: colors.primaryDark,
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 24,
   },
-
-  header: {
-    flexDirection: "row",
-    justifyContent: "space-between",
+  logoContainer: {
+    alignItems: "center",
+    marginBottom: 60,
+  },
+  logoIcon: {
+    width: 88,
+    height: 88,
+    borderRadius: 24,
+    backgroundColor: colors.primary,
+    justifyContent: "center",
     alignItems: "center",
     marginBottom: 20,
+    shadowColor: colors.primary,
+    shadowOpacity: 0.5,
+    shadowOffset: { width: 0, height: 8 },
+    shadowRadius: 24,
+    elevation: 12,
   },
-
-  voltar: {
-    color: "#1E56D4",
-    fontSize: 28,
-    fontWeight: "bold",
+  logoIconText: {
+    color: colors.white,
+    fontSize: 48,
+    fontWeight: "900",
+    letterSpacing: -2,
   },
-
-  titulo: {
-    fontSize: 18,
-    fontWeight: "bold",
+  logoText: {
+    color: colors.white,
+    fontSize: 42,
+    fontWeight: "900",
+    letterSpacing: -1,
+    marginBottom: 4,
   },
-
-  buscaContainer: {
-    flexDirection: "row",
+  tagline: {
+    color: colors.primaryLight,
+    fontSize: 12,
+    fontWeight: "700",
+    letterSpacing: 8,
+  },
+  loadingContainer: {
+    position: "absolute",
+    bottom: 80,
     alignItems: "center",
-    backgroundColor: "#E5E7EB",
-    borderRadius: 12,
-    paddingHorizontal: 15,
-    paddingVertical: 12,
-    marginBottom: 20,
   },
-
-  lupa: {
-    marginRight: 10,
-    fontSize: 16,
-  },
-
-  input: {
-    flex: 1,
-    fontSize: 15,
-  },
-
-  card: {
-    backgroundColor: "#FFFFFF",
-    padding: 18,
-    borderRadius: 14,
-    marginBottom: 12,
-    shadowColor: "#000",
-    shadowOpacity: 0.05,
-    shadowOffset: { width: 0, height: 2 },
-    shadowRadius: 4,
-    elevation: 2,
-  },
-
-  nome: {
-    fontSize: 16,
-    fontWeight: "600",
-  },
-
-  sub: {
-    marginTop: 4,
+  loadingText: {
+    color: colors.textInverse,
     fontSize: 13,
-    color: "#6B7280",
+    marginTop: 12,
+    opacity: 0.7,
   },
 });
