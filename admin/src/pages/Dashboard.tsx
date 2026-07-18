@@ -4,10 +4,32 @@ import { MapContainer, TileLayer, Polyline, useMap } from "react-leaflet";
 import L from "leaflet";
 import type { LatLngExpression } from "leaflet";
 import "leaflet/dist/leaflet.css";
+import {
+  Route,
+  Map as MapIcon,
+  Users,
+  Truck,
+  AlertTriangle,
+  ChevronRight,
+  Crosshair,
+  MapPin,
+  IdCard,
+  FileText,
+  Shield,
+  UserPlus,
+  Bus,
+  KeyRound,
+  Sun,
+  Moon,
+  Sunrise,
+} from "lucide-react";
 import { supabase } from "../supabase";
 import { useAuth } from "../contexts/AuthContext";
 import type { Motorista, Veiculo } from "../types/database";
 import { formatarData } from "../lib/formatters";
+import { Card, CardHeader } from "../components/ui/Card";
+import { StatCard } from "../components/ui/StatCard";
+import { EmptyState } from "../components/ui/EmptyState";
 
 interface RotaResumo {
   id: string;
@@ -50,21 +72,36 @@ function normalizarLista(lista: any[]): LatLngExpression[] {
     .filter((p: any) => p[0] !== 0 || p[1] !== 0);
 }
 
-function saudacao(): { texto: string; emoji: string } {
+function saudacao() {
   const hora = new Date().getHours();
-  if (hora < 12) return { texto: "Bom dia", emoji: "☀️" };
-  if (hora < 18) return { texto: "Boa tarde", emoji: "🌤️" };
-  return { texto: "Boa noite", emoji: "🌙" };
+  if (hora < 12) return { texto: "Bom dia", Icon: Sunrise };
+  if (hora < 18) return { texto: "Boa tarde", Icon: Sun };
+  return { texto: "Boa noite", Icon: Moon };
 }
 
 function dataFormatada(): string {
   const dias = [
-    "domingo", "segunda-feira", "terça-feira", "quarta-feira",
-    "quinta-feira", "sexta-feira", "sábado",
+    "domingo",
+    "segunda-feira",
+    "terça-feira",
+    "quarta-feira",
+    "quinta-feira",
+    "sexta-feira",
+    "sábado",
   ];
   const meses = [
-    "janeiro", "fevereiro", "março", "abril", "maio", "junho",
-    "julho", "agosto", "setembro", "outubro", "novembro", "dezembro",
+    "janeiro",
+    "fevereiro",
+    "março",
+    "abril",
+    "maio",
+    "junho",
+    "julho",
+    "agosto",
+    "setembro",
+    "outubro",
+    "novembro",
+    "dezembro",
   ];
   const d = new Date();
   return `${dias[d.getDay()]}, ${d.getDate()} de ${meses[d.getMonth()]} de ${d.getFullYear()}`;
@@ -77,8 +114,14 @@ function diasAte(data?: string): number {
   );
 }
 
+const ICON_ALERTA = {
+  cnh: IdCard,
+  licenciamento: FileText,
+  seguro: Shield,
+};
+
 /* =========================
-   COMPONENTE FITBOUNDS + REF DO MAPA
+   FIT BOUNDS
 ========================= */
 function FitBounds({
   bounds,
@@ -115,6 +158,7 @@ export default function Dashboard() {
 
   const primeiroNome = usuario?.nome?.split(" ")[0] || "Usuário";
   const sauda = saudacao();
+  const SaudaIcon = sauda.Icon;
 
   useEffect(() => {
     carregarDados();
@@ -123,20 +167,21 @@ export default function Dashboard() {
   const carregarDados = async () => {
     setLoading(true);
     try {
-      const [rotasRes, motoristasRes, veiculosRes, pinsRes] = await Promise.all([
-        supabase
-          .from("rotas")
-          .select(
-            "id, nome, cor, pontos_snap, distancia_km, duracao_min, categoria, turno, horario_saida, created_at"
-          )
-          .order("created_at", { ascending: false }),
-        supabase.from("motoristas").select("*"),
-        supabase.from("veiculos").select("*"),
-        supabase
-          .from("pins_autorizacao")
-          .select("id", { count: "exact" })
-          .eq("status", "ativo"),
-      ]);
+      const [rotasRes, motoristasRes, veiculosRes, pinsRes] =
+        await Promise.all([
+          supabase
+            .from("rotas")
+            .select(
+              "id, nome, cor, pontos_snap, distancia_km, duracao_min, categoria, turno, horario_saida, created_at"
+            )
+            .order("created_at", { ascending: false }),
+          supabase.from("motoristas").select("*"),
+          supabase.from("veiculos").select("*"),
+          supabase
+            .from("pins_autorizacao")
+            .select("id", { count: "exact" })
+            .eq("status", "ativo"),
+        ]);
 
       if (rotasRes.data) {
         const rotasNormalizadas = rotasRes.data.map((r: any) => ({
@@ -263,12 +308,15 @@ export default function Dashboard() {
     return L.latLngBounds(todosPontos as any);
   }, [rotas]);
 
-  // 🆕 Função de centralizar (botão)
   const centralizarMapa = () => {
     const map = (window as any).__dashboardMap;
     if (!map) return;
     if (boundsMapa) {
-      map.flyToBounds(boundsMapa, { padding: [30, 30], maxZoom: 14, duration: 1 });
+      map.flyToBounds(boundsMapa, {
+        padding: [30, 30],
+        maxZoom: 14,
+        duration: 1,
+      });
     } else {
       map.flyTo([-23.55, -46.63], 12, { duration: 1 });
     }
@@ -278,9 +326,10 @@ export default function Dashboard() {
     <div className="space-y-6">
       {/* SAUDAÇÃO */}
       <div>
-        <div className="flex items-baseline gap-2">
+        <div className="flex items-center gap-2.5">
+          <SaudaIcon className="w-6 h-6 text-amber-500" strokeWidth={2.2} />
           <h1 className="text-2xl font-bold text-slate-800">
-            {sauda.texto}, {primeiroNome} {sauda.emoji}
+            {sauda.texto}, {primeiroNome}
           </h1>
         </div>
         <p className="text-sm text-slate-500 mt-1 capitalize">
@@ -290,117 +339,69 @@ export default function Dashboard() {
 
       {/* CARDS DE STATS */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* LINHAS */}
-        <div
-          className="bg-white rounded-2xl border shadow-sm p-6 hover:shadow-md transition cursor-pointer group"
+        <StatCard
+          label="Linhas"
+          value={0}
+          helpText="Em breve"
+          icon={Route}
+          color="blue"
           onClick={() => navigate("/rotas")}
-        >
-          <div className="flex items-start justify-between">
-            <div>
-              <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-                LINHAS
-              </p>
-              <p className="text-4xl font-black text-slate-800 mt-2">0</p>
-              <p className="text-xs text-slate-500 mt-1">Em breve</p>
-            </div>
-            <div className="w-12 h-12 rounded-xl bg-blue-50 flex items-center justify-center group-hover:scale-110 transition">
-              <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
-              </svg>
-            </div>
-          </div>
-        </div>
+        />
 
-        {/* ROTAS */}
-        <div
-          className="bg-white rounded-2xl border shadow-sm p-6 hover:shadow-md transition cursor-pointer group"
+        <StatCard
+          label="Rotas"
+          value={stats.rotas}
+          helpText={stats.rotas === 1 ? "cadastrada" : "cadastradas"}
+          icon={MapIcon}
+          color="emerald"
+          loading={loading}
           onClick={() => navigate("/rotas")}
-        >
-          <div className="flex items-start justify-between">
-            <div>
-              <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-                ROTAS
-              </p>
-              <p className="text-4xl font-black text-slate-800 mt-2">
-                {loading ? "..." : stats.rotas}
-              </p>
-              <p className="text-xs text-slate-500 mt-1">
-                {stats.rotas === 1 ? "cadastrada" : "cadastradas"}
-              </p>
-            </div>
-            <div className="w-12 h-12 rounded-xl bg-emerald-50 flex items-center justify-center group-hover:scale-110 transition">
-              <svg className="w-6 h-6 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                <path strokeLinecap="round" strokeLinejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-              </svg>
-            </div>
-          </div>
-        </div>
+        />
 
-        {/* MOTORISTAS */}
-        <div
-          className="bg-white rounded-2xl border shadow-sm p-6 hover:shadow-md transition cursor-pointer group"
+        <StatCard
+          label="Motoristas"
+          value={stats.motoristasAtivos}
+          helpText={
+            stats.motoristasTotal > stats.motoristasAtivos
+              ? `${stats.motoristasAtivos} ativos de ${stats.motoristasTotal}`
+              : "ativos"
+          }
+          icon={Users}
+          color="purple"
+          loading={loading}
           onClick={() => navigate("/motoristas")}
-        >
-          <div className="flex items-start justify-between">
-            <div>
-              <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-                MOTORISTAS
-              </p>
-              <p className="text-4xl font-black text-slate-800 mt-2">
-                {loading ? "..." : stats.motoristasAtivos}
-              </p>
-              <p className="text-xs text-slate-500 mt-1">
-                {stats.motoristasTotal > stats.motoristasAtivos
-                  ? `${stats.motoristasAtivos} ativos de ${stats.motoristasTotal}`
-                  : "ativos"}
-              </p>
-            </div>
-            <div className="w-12 h-12 rounded-xl bg-purple-50 flex items-center justify-center group-hover:scale-110 transition">
-              <svg className="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-              </svg>
-            </div>
-          </div>
-        </div>
+        />
 
-        {/* VEÍCULOS */}
-        <div
-          className="bg-white rounded-2xl border shadow-sm p-6 hover:shadow-md transition cursor-pointer group"
+        <StatCard
+          label="Veículos"
+          value={stats.veiculosAtivos}
+          helpText={
+            stats.veiculosTotal > stats.veiculosAtivos
+              ? `${stats.veiculosAtivos} ativos de ${stats.veiculosTotal}`
+              : "ativos"
+          }
+          icon={Truck}
+          color="amber"
+          loading={loading}
           onClick={() => navigate("/veiculos")}
-        >
-          <div className="flex items-start justify-between">
-            <div>
-              <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-                VEÍCULOS
-              </p>
-              <p className="text-4xl font-black text-slate-800 mt-2">
-                {loading ? "..." : stats.veiculosAtivos}
-              </p>
-              <p className="text-xs text-slate-500 mt-1">
-                {stats.veiculosTotal > stats.veiculosAtivos
-                  ? `${stats.veiculosAtivos} ativos de ${stats.veiculosTotal}`
-                  : "ativos"}
-              </p>
-            </div>
-            <div className="w-12 h-12 rounded-xl bg-amber-50 flex items-center justify-center group-hover:scale-110 transition">
-              <svg className="w-6 h-6 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
-              </svg>
-            </div>
-          </div>
-        </div>
+        />
       </div>
 
       {/* ALERTAS */}
       {alertas.length > 0 && (
-        <div className="bg-white rounded-2xl border shadow-sm overflow-hidden">
-          <div className="px-6 py-4 border-b bg-gradient-to-r from-amber-50 to-red-50">
-            <div className="flex items-center gap-2">
-              <span className="text-xl">⚠️</span>
+        <Card className="overflow-hidden">
+          <div className="px-6 py-4 border-b border-slate-100 bg-gradient-to-r from-amber-50 to-red-50">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center shadow-sm">
+                <AlertTriangle
+                  className="w-5 h-5 text-amber-600"
+                  strokeWidth={2.2}
+                />
+              </div>
               <div>
                 <h2 className="font-bold text-slate-800">
-                  {alertas.length} {alertas.length === 1 ? "alerta" : "alertas"} de documentos
+                  {alertas.length}{" "}
+                  {alertas.length === 1 ? "alerta" : "alertas"} de documentos
                 </h2>
                 <p className="text-xs text-slate-500">
                   Documentos vencidos ou próximos do vencimento
@@ -408,59 +409,80 @@ export default function Dashboard() {
               </div>
             </div>
           </div>
-          <div className="max-h-64 overflow-y-auto">
-            {alertas.slice(0, 5).map((a) => (
-              <div
-                key={a.id}
-                onClick={() => navigate(a.link)}
-                className="px-6 py-3 border-b border-slate-100 hover:bg-slate-50 cursor-pointer transition flex items-center gap-3 group"
-              >
+          <div className="max-h-72 overflow-y-auto">
+            {alertas.slice(0, 5).map((a) => {
+              const AlertIcon = ICON_ALERTA[a.tipo];
+              const isVencido = a.urgencia === "vencido";
+              return (
                 <div
-                  className={`w-2 h-2 rounded-full ${
-                    a.urgencia === "vencido" ? "bg-red-500 animate-pulse" : "bg-amber-500"
-                  }`}
-                />
-                <div className="flex-1 min-w-0">
-                  <p className={`text-sm font-semibold ${a.urgencia === "vencido" ? "text-red-700" : "text-amber-700"}`}>
-                    {a.tipo === "cnh" ? "🪪" : a.tipo === "licenciamento" ? "📋" : "🛡️"} {a.titulo}
-                  </p>
-                  <p className="text-xs text-slate-500">{a.descricao}</p>
+                  key={a.id}
+                  onClick={() => navigate(a.link)}
+                  className="px-6 py-3.5 border-b border-slate-100 last:border-b-0 hover:bg-slate-50 cursor-pointer transition flex items-center gap-3 group"
+                >
+                  <div
+                    className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 ${
+                      isVencido ? "bg-red-100" : "bg-amber-100"
+                    }`}
+                  >
+                    <AlertIcon
+                      className={`w-4.5 h-4.5 ${
+                        isVencido ? "text-red-600" : "text-amber-600"
+                      }`}
+                      strokeWidth={2}
+                    />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p
+                      className={`text-sm font-semibold truncate ${
+                        isVencido ? "text-red-700" : "text-amber-700"
+                      }`}
+                    >
+                      {a.titulo}
+                    </p>
+                    <p className="text-xs text-slate-500 truncate">
+                      {a.descricao}
+                    </p>
+                  </div>
+                  <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-slate-700 group-hover:translate-x-0.5 transition" />
                 </div>
-                <span className="text-slate-400 group-hover:text-slate-700 transition">→</span>
-              </div>
-            ))}
+              );
+            })}
             {alertas.length > 5 && (
               <div className="px-6 py-3 text-center text-xs text-slate-500 bg-slate-50">
-                +{alertas.length - 5} {alertas.length - 5 === 1 ? "outro alerta" : "outros alertas"}
+                +{alertas.length - 5}{" "}
+                {alertas.length - 5 === 1
+                  ? "outro alerta"
+                  : "outros alertas"}
               </div>
             )}
           </div>
-        </div>
+        </Card>
       )}
 
       {/* MAPA + LATERAL */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* MAPA */}
-        <div className="lg:col-span-2 bg-white rounded-2xl border shadow-sm overflow-hidden">
-          <div className="px-6 py-4 border-b flex items-center justify-between">
-            <div>
-              <h2 className="font-bold text-slate-800">Mapa da operação</h2>
-              <p className="text-xs text-slate-500">
-                {rotas.length > 0
-                  ? `${rotas.length} ${rotas.length === 1 ? "rota" : "rotas"} cadastrada${rotas.length === 1 ? "" : "s"}`
-                  : "Nenhuma rota cadastrada ainda"}
-              </p>
-            </div>
-
-            {/* 🆕 Botão centralizar */}
-            <button
-              onClick={centralizarMapa}
-              className="text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-2 rounded-lg font-semibold transition active:scale-95 flex items-center gap-1.5"
-              title="Centralizar mapa"
-            >
-              🎯 Centralizar
-            </button>
-          </div>
+        <Card className="lg:col-span-2 overflow-hidden">
+          <CardHeader
+            title="Mapa da operação"
+            subtitle={
+              rotas.length > 0
+                ? `${rotas.length} ${
+                    rotas.length === 1 ? "rota" : "rotas"
+                  } cadastrada${rotas.length === 1 ? "" : "s"}`
+                : "Nenhuma rota cadastrada ainda"
+            }
+            action={
+              <button
+                onClick={centralizarMapa}
+                className="text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-2 rounded-lg font-semibold transition active:scale-95 flex items-center gap-1.5"
+                title="Centralizar mapa"
+              >
+                <Crosshair className="w-3.5 h-3.5" strokeWidth={2.2} />
+                Centralizar
+              </button>
+            }
+          />
           <div className="h-[400px] relative">
             <MapContainer
               center={[-23.55, -46.63]}
@@ -485,49 +507,52 @@ export default function Dashboard() {
               <FitBounds bounds={boundsMapa} trigger={rotas.length} />
             </MapContainer>
           </div>
-          <div className="px-6 py-3 border-t">
+          <div className="px-6 py-3 border-t border-slate-100">
             <button
               onClick={() => navigate("/rotas")}
-              className="text-sm font-semibold text-blue-600 hover:text-blue-700 transition"
+              className="text-sm font-semibold text-blue-600 hover:text-blue-700 transition flex items-center gap-1 group"
             >
-              Ver no mapa completo →
+              Ver no mapa completo
+              <ChevronRight className="w-4 h-4 group-hover:translate-x-0.5 transition" />
             </button>
           </div>
-        </div>
+        </Card>
 
         {/* LATERAL - Últimas rotas */}
-        <div className="bg-white rounded-2xl border shadow-sm overflow-hidden flex flex-col">
-          <div className="px-6 py-4 border-b">
-            <h2 className="font-bold text-slate-800">Rotas recentes</h2>
-            <p className="text-xs text-slate-500">Últimas cadastradas</p>
-          </div>
+        <Card className="overflow-hidden flex flex-col">
+          <CardHeader
+            title="Rotas recentes"
+            subtitle="Últimas cadastradas"
+          />
           <div className="flex-1 overflow-y-auto">
             {ultimasRotas.length === 0 && (
-              <div className="p-8 text-center">
-                <div className="text-4xl mb-2">📍</div>
-                <p className="text-sm text-slate-500">Nenhuma rota cadastrada</p>
-                <button
-                  onClick={() => navigate("/rotas")}
-                  className="mt-3 text-xs font-semibold text-blue-600 hover:underline"
-                >
-                  Cadastrar primeira rota →
-                </button>
-              </div>
+              <EmptyState
+                icon={MapPin}
+                title="Nenhuma rota cadastrada"
+                description="Comece cadastrando a primeira rota"
+                compact
+                action={{
+                  label: "Cadastrar rota",
+                  onClick: () => navigate("/rotas"),
+                }}
+              />
             )}
             {ultimasRotas.map((r) => (
               <div
                 key={r.id}
                 onClick={() => navigate("/rotas")}
-                className="px-6 py-4 border-b border-slate-100 hover:bg-slate-50 cursor-pointer transition"
+                className="px-6 py-4 border-b border-slate-100 last:border-b-0 hover:bg-slate-50 cursor-pointer transition"
               >
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">
                       <div
-                        className="w-2 h-2 rounded-full flex-shrink-0"
+                        className="w-2.5 h-2.5 rounded-full flex-shrink-0"
                         style={{ backgroundColor: r.cor }}
                       />
-                      <p className="font-bold text-slate-800 truncate">{r.nome}</p>
+                      <p className="font-bold text-slate-800 truncate">
+                        {r.nome}
+                      </p>
                     </div>
                     <p className="text-xs text-slate-500">
                       {r.categoria && `${r.categoria} · `}
@@ -542,77 +567,125 @@ export default function Dashboard() {
               </div>
             ))}
           </div>
-          <div className="px-6 py-3 border-t">
+          <div className="px-6 py-3 border-t border-slate-100">
             <button
               onClick={() => navigate("/rotas")}
-              className="w-full bg-[#1E56D4] hover:bg-blue-700 text-white py-3 rounded-xl font-semibold text-sm transition active:scale-95"
+              className="w-full bg-[#1E56D4] hover:bg-blue-700 text-white py-3 rounded-xl font-semibold text-sm transition active:scale-95 shadow-lg shadow-blue-500/20"
             >
               Ver todas as rotas
             </button>
           </div>
-        </div>
+        </Card>
       </div>
 
       {/* AÇÕES RÁPIDAS */}
-      <div className="bg-white rounded-2xl border shadow-sm p-6">
-        <div className="mb-4">
-          <h2 className="font-bold text-slate-800">Ações rápidas</h2>
-          <p className="text-xs text-slate-500">Atalhos para o que você mais faz</p>
+      <Card>
+        <div className="p-6">
+          <div className="mb-4">
+            <h2 className="font-bold text-slate-800">Ações rápidas</h2>
+            <p className="text-xs text-slate-500">
+              Atalhos para o que você mais faz
+            </p>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <QuickAction
+              icon={MapPin}
+              label="Nova Rota"
+              hint="Criar no mapa"
+              color="blue"
+              onClick={() => navigate("/rotas")}
+            />
+            <QuickAction
+              icon={UserPlus}
+              label="Motorista"
+              hint="Cadastrar"
+              color="purple"
+              onClick={() => navigate("/motoristas")}
+            />
+            <QuickAction
+              icon={Bus}
+              label="Veículo"
+              hint="Cadastrar"
+              color="amber"
+              onClick={() => navigate("/veiculos")}
+            />
+            <QuickAction
+              icon={KeyRound}
+              label="Gerar PIN"
+              hint={`${stats.pinsAtivos} ativos`}
+              color="emerald"
+              onClick={() => navigate("/pins")}
+            />
+          </div>
         </div>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <button
-            onClick={() => navigate("/rotas")}
-            className="flex items-center gap-3 p-4 rounded-xl border-2 border-slate-200 hover:border-blue-500 hover:bg-blue-50 transition group active:scale-95"
-          >
-            <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center text-xl group-hover:scale-110 transition">
-              📍
-            </div>
-            <div className="text-left">
-              <p className="text-sm font-bold text-slate-800">Nova Rota</p>
-              <p className="text-[10px] text-slate-500">Criar no mapa</p>
-            </div>
-          </button>
-
-          <button
-            onClick={() => navigate("/motoristas")}
-            className="flex items-center gap-3 p-4 rounded-xl border-2 border-slate-200 hover:border-purple-500 hover:bg-purple-50 transition group active:scale-95"
-          >
-            <div className="w-10 h-10 rounded-lg bg-purple-100 flex items-center justify-center text-xl group-hover:scale-110 transition">
-              👤
-            </div>
-            <div className="text-left">
-              <p className="text-sm font-bold text-slate-800">Motorista</p>
-              <p className="text-[10px] text-slate-500">Cadastrar</p>
-            </div>
-          </button>
-
-          <button
-            onClick={() => navigate("/veiculos")}
-            className="flex items-center gap-3 p-4 rounded-xl border-2 border-slate-200 hover:border-amber-500 hover:bg-amber-50 transition group active:scale-95"
-          >
-            <div className="w-10 h-10 rounded-lg bg-amber-100 flex items-center justify-center text-xl group-hover:scale-110 transition">
-              🚌
-            </div>
-            <div className="text-left">
-              <p className="text-sm font-bold text-slate-800">Veículo</p>
-              <p className="text-[10px] text-slate-500">Cadastrar</p>
-            </div>
-          </button>
-
-          <button
-            onClick={() => navigate("/pins")}
-            className="flex items-center gap-3 p-4 rounded-xl border-2 border-slate-200 hover:border-green-500 hover:bg-green-50 transition group active:scale-95"
-          >
-            <div className="w-10 h-10 rounded-lg bg-green-100 flex items-center justify-center text-xl group-hover:scale-110 transition">
-              🔑
-            </div>
-            <div className="text-left">
-              <p className="text-sm font-bold text-slate-800">Gerar PIN</p>
-              <p className="text-[10px] text-slate-500">{stats.pinsAtivos} ativos</p>
-            </div>
-          </button>
-        </div>
-      </div>
+      </Card>
     </div>
+  );
+}
+
+/* =========================
+   QUICK ACTION (subcomponente)
+========================= */
+type ActionColor = "blue" | "purple" | "amber" | "emerald";
+
+const ACTION_COLORS: Record<
+  ActionColor,
+  { border: string; bg: string; iconBg: string; iconText: string }
+> = {
+  blue: {
+    border: "hover:border-blue-500",
+    bg: "hover:bg-blue-50",
+    iconBg: "bg-blue-100",
+    iconText: "text-blue-600",
+  },
+  purple: {
+    border: "hover:border-purple-500",
+    bg: "hover:bg-purple-50",
+    iconBg: "bg-purple-100",
+    iconText: "text-purple-600",
+  },
+  amber: {
+    border: "hover:border-amber-500",
+    bg: "hover:bg-amber-50",
+    iconBg: "bg-amber-100",
+    iconText: "text-amber-600",
+  },
+  emerald: {
+    border: "hover:border-emerald-500",
+    bg: "hover:bg-emerald-50",
+    iconBg: "bg-emerald-100",
+    iconText: "text-emerald-600",
+  },
+};
+
+function QuickAction({
+  icon: Icon,
+  label,
+  hint,
+  color,
+  onClick,
+}: {
+  icon: any;
+  label: string;
+  hint: string;
+  color: ActionColor;
+  onClick: () => void;
+}) {
+  const c = ACTION_COLORS[color];
+  return (
+    <button
+      onClick={onClick}
+      className={`flex items-center gap-3 p-4 rounded-xl border-2 border-slate-200 ${c.border} ${c.bg} transition group active:scale-95 text-left`}
+    >
+      <div
+        className={`w-10 h-10 rounded-lg ${c.iconBg} flex items-center justify-center group-hover:scale-110 transition flex-shrink-0`}
+      >
+        <Icon className={`w-5 h-5 ${c.iconText}`} strokeWidth={2.2} />
+      </div>
+      <div className="min-w-0">
+        <p className="text-sm font-bold text-slate-800 truncate">{label}</p>
+        <p className="text-[10px] text-slate-500 truncate">{hint}</p>
+      </div>
+    </button>
   );
 }

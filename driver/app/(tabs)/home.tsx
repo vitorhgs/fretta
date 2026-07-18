@@ -12,9 +12,12 @@ import {
 import { useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { SafeAreaView } from "react-native-safe-area-context";
+import Svg, { Path, Circle } from "react-native-svg";
 import { supabase } from "../../supabase";
 import { useAuth } from "../../contexts/AuthContext";
 import { colors, shadows } from "../../theme/colors";
+import { HomeHeader } from "../../components/HomeHeader";
+import { usePushNotifications } from "../../hooks/usePushNotifications";
 
 interface Rota {
   id: string;
@@ -25,11 +28,81 @@ interface Rota {
   pontos_originais: any[];
   categoria?: string;
   turno?: string;
-  turnos_atendidos?: string[]; // 🆕
-  status_rota?: string; // 🆕
+  turnos_atendidos?: string[];
+  status_rota?: string;
   horario_saida?: string;
 }
 
+/* =========================
+   ÍCONES SVG
+========================= */
+function IconeBusca({ size = 16, color = "rgba(255,255,255,0.6)" }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill={color}>
+      <Path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0016 9.5 6.5 6.5 0 109.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z" />
+    </Svg>
+  );
+}
+
+function IconeFechar({ size = 14, color = "rgba(255,255,255,0.7)" }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill={color}>
+      <Path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" />
+    </Svg>
+  );
+}
+
+function IconeSeta({ size = 20, color = colors.textSecondary }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill={color}>
+      <Path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z" />
+    </Svg>
+  );
+}
+
+function IconeCaixaVazia({ size = 64, color = colors.textMuted }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill={color}>
+      <Path d="M20 2H4c-1 0-2 .9-2 2v3.01c0 .72.43 1.34 1 1.69V20c0 1.1 1.1 2 2 2h14c.9 0 2-.9 2-2V8.7c.57-.35 1-.97 1-1.69V4c0-1.1-1-2-2-2zm-5 12H9v-2h6v2zm5-7H4V4l16-.02V7z" />
+    </Svg>
+  );
+}
+
+function IconeRelogio({ size = 12, color = colors.white }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill={color}>
+      <Path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10S17.5 2 12 2zm0 18c-4.4 0-8-3.6-8-8s3.6-8 8-8 8 3.6 8 8-3.6 8-8 8zm.5-13H11v6l5.2 3.2.8-1.3-4.5-2.7V7z" />
+    </Svg>
+  );
+}
+
+function IconeLocalizacao({ size = 12, color = colors.textMuted }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill={color}>
+      <Path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" />
+    </Svg>
+  );
+}
+
+function IconeRaio({ size = 12, color = colors.textMuted }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill={color}>
+      <Path d="M7 2v11h3v9l7-12h-4l4-8z" />
+    </Svg>
+  );
+}
+
+function IconeCronometro({ size = 12, color = colors.textMuted }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill={color}>
+      <Path d="M15 1H9v2h6V1zm-4 13h2V8h-2v6zm8.03-6.61l1.42-1.42c-.43-.51-.9-.99-1.41-1.41l-1.42 1.42C16.07 4.74 14.12 4 12 4c-4.97 0-9 4.03-9 9s4.02 9 9 9 9-4.03 9-9c0-2.12-.74-4.07-1.97-5.61zM12 20c-3.87 0-7-3.13-7-7s3.13-7 7-7 7 3.13 7 7-3.13 7-7 7z" />
+    </Svg>
+  );
+}
+
+/* =========================
+   HELPERS
+========================= */
 function saudacao(): string {
   const h = new Date().getHours();
   if (h < 12) return "Bom dia";
@@ -54,9 +127,13 @@ function iniciais(nome: string): string {
     .toUpperCase();
 }
 
+/* =========================
+   COMPONENTE
+========================= */
 export default function Home() {
   const router = useRouter();
   const { motorista } = useAuth();
+  usePushNotifications();
   const [rotas, setRotas] = useState<Rota[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -82,20 +159,20 @@ export default function Home() {
   }, []);
 
   const carregarRotas = useCallback(async () => {
-  const { data, error } = await supabase
-    .from("rotas")
-    .select(
-      "id, nome, cor, distancia_km, duracao_min, pontos_originais, categoria, turno, turnos_atendidos, status_rota, horario_saida"
-    )
-    .or("status_rota.eq.ativa,status_rota.is.null") // só ativas (e legado sem status)
-    .order("created_at", { ascending: false });
+    const { data, error } = await supabase
+      .from("rotas")
+      .select(
+        "id, nome, cor, distancia_km, duracao_min, pontos_originais, categoria, turno, turnos_atendidos, status_rota, horario_saida"
+      )
+      .or("status_rota.eq.ativa,status_rota.is.null")
+      .order("created_at", { ascending: false });
 
-  if (!error && data) {
-    setRotas(data as Rota[]);
-  }
-  setLoading(false);
-  setRefreshing(false);
-}, []);
+    if (!error && data) {
+      setRotas(data as Rota[]);
+    }
+    setLoading(false);
+    setRefreshing(false);
+  }, []);
 
   useEffect(() => {
     carregarRotas();
@@ -112,7 +189,7 @@ export default function Home() {
     const passaBusca = r.nome.toLowerCase().includes(busca.toLowerCase());
     const passaTurno =
       filtroTurno === "todos" ||
-      (r.turno?.toLowerCase() === filtroTurno.toLowerCase());
+      r.turno?.toLowerCase() === filtroTurno.toLowerCase();
     return passaBusca && passaTurno;
   });
 
@@ -131,85 +208,42 @@ export default function Home() {
     <SafeAreaView style={styles.container} edges={["top"]}>
       <StatusBar style="light" />
 
-      {/* HEADER */}
-      <View style={styles.header}>
-        <View style={styles.headerTop}>
-          {/* Esquerda: data + hora */}
-          <View style={{ flex: 1 }}>
-            <View style={styles.dataHoraLinha}>
-              <Text style={styles.dataTexto}>{dataHoje()}</Text>
-              <View style={styles.horaBadge}>
-                <View style={styles.horaPonto} />
-                <Text style={styles.horaTexto}>{hora}</Text>
-              </View>
-            </View>
-          </View>
+<View style={styles.header}>
+<HomeHeader
+  nome={motorista?.nome}
+  busca={busca}
+  onChangeBusca={setBusca}
+/>
 
-          {/* Direita: saudação + nome + avatar */}
-          <TouchableOpacity
-            style={styles.perfilContainer}
-            onPress={() => router.push("/perfil" as any)}
-            activeOpacity={0.7}
-          >
-            <View style={styles.perfilTextos}>
-              <Text style={styles.saudacao}>{saudacao()},</Text>
-              <Text style={styles.nome}>{primeiroNome}</Text>
-            </View>
-            <View style={styles.avatarWrap}>
-              <View style={styles.avatar}>
-                <Text style={styles.avatarText}>
-                  {iniciais(motorista?.nome || "")}
-                </Text>
-              </View>
-              <View style={styles.statusOnline} />
-            </View>
-          </TouchableOpacity>
-        </View>
+  {/* Filtros de turno */}
+  <View style={styles.filtrosContainer}>
+    {["todos", "Manhã", "Tarde", "Noite"].map((t) => (
+      <TouchableOpacity
+        key={t}
+        onPress={() => setFiltroTurno(t)}
+        style={[
+          styles.filtroBtn,
+          filtroTurno === t && styles.filtroBtnAtivo,
+        ]}
+        activeOpacity={0.7}
+      >
+        <Text
+          style={[
+            styles.filtroTexto,
+            filtroTurno === t && styles.filtroTextoAtivo,
+          ]}
+        >
+          {t === "todos" ? "Todas" : t}
+        </Text>
 
-        {/* Busca */}
-        <View style={styles.buscaContainer}>
-          <Text style={styles.buscaIcon}>🔍</Text>
-          <TextInput
-            style={styles.buscaInput}
-            placeholder="Buscar rota..."
-            placeholderTextColor="rgba(255,255,255,0.5)"
-            value={busca}
-            onChangeText={setBusca}
-          />
-          {busca ? (
-            <TouchableOpacity onPress={() => setBusca("")}>
-              <Text style={styles.buscaClear}>✕</Text>
-            </TouchableOpacity>
-          ) : null}
-        </View>
+        {t !== "todos" && turnoAtual === t && (
+          <View style={styles.filtroPonto} />
+        )}
+      </TouchableOpacity>
+    ))}
+  </View>
+</View>
 
-        {/* Filtros de turno */}
-        <View style={styles.filtrosContainer}>
-          {["todos", "Manhã", "Tarde", "Noite"].map((t) => (
-            <TouchableOpacity
-              key={t}
-              onPress={() => setFiltroTurno(t)}
-              style={[
-                styles.filtroBtn,
-                filtroTurno === t && styles.filtroBtnAtivo,
-              ]}
-              activeOpacity={0.7}
-            >
-              <Text
-                style={[
-                  styles.filtroTexto,
-                  filtroTurno === t && styles.filtroTextoAtivo,
-                ]}
-              >
-                {t === "todos" ? "Todas" : t}
-              </Text>
-              {t !== "todos" && turnoAtual === t && (
-                <View style={styles.filtroPonto} />
-              )}
-            </TouchableOpacity>
-          ))}
-        </View>
-      </View>
 
       {/* Sugestão do turno atual */}
       {rotasTurnoAtual.length > 0 && filtroTurno === "todos" && !busca && (
@@ -249,7 +283,12 @@ export default function Home() {
         <FlatList
           data={rotasFiltradas}
           keyExtractor={(item) => item.id}
-          contentContainerStyle={styles.lista}
+          contentContainerStyle={{
+            paddingHorizontal: 20,
+            paddingTop: 4,
+            paddingBottom: 110,
+            gap: 10,
+          }}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
@@ -259,7 +298,7 @@ export default function Home() {
           }
           ListEmptyComponent={
             <View style={styles.vazio}>
-              <Text style={styles.vazioEmoji}>📭</Text>
+              <IconeCaixaVazia size={72} color={colors.border} />
               <Text style={styles.vazioTitulo}>
                 {rotas.length === 0
                   ? "Nenhuma rota disponível"
@@ -290,25 +329,22 @@ export default function Home() {
                     params: { rotaId: item.id },
                   })
                 }
-                activeOpacity={0.7}
+                activeOpacity={0.75}
               >
+                {/* Barra lateral colorida */}
                 <View
                   style={[styles.corLateral, { backgroundColor: item.cor }]}
                 />
 
                 <View style={styles.cardConteudo}>
-                  <View style={styles.cardHeader}>
+                  {/* Linha 1: Nome + tags + seta */}
+                  <View style={styles.cardTopo}>
                     <View style={{ flex: 1 }}>
-                      <Text style={styles.cardNome}>{item.nome}</Text>
+                      <Text style={styles.cardNome} numberOfLines={1}>
+                        {item.nome}
+                      </Text>
                       {(item.categoria || item.turno) && (
                         <View style={styles.tagsRow}>
-                          {item.categoria && (
-                            <View style={styles.tag}>
-                              <Text style={styles.tagTexto}>
-                                {item.categoria}
-                              </Text>
-                            </View>
-                          )}
                           {item.turno && (
                             <View
                               style={[
@@ -326,51 +362,65 @@ export default function Home() {
                               </Text>
                             </View>
                           )}
+                          {item.categoria && (
+                            <View style={styles.tag}>
+                              <Text style={styles.tagTexto}>
+                                {item.categoria}
+                              </Text>
+                            </View>
+                          )}
+                          {item.horario_saida && (
+                            <View style={styles.tagHorario}>
+                              <IconeRelogio size={10} color={colors.primary} />
+                              <Text style={styles.tagHorarioTexto}>
+                                {item.horario_saida.slice(0, 5)}
+                              </Text>
+                            </View>
+                          )}
                         </View>
                       )}
                     </View>
+
                     <View style={styles.setaContainer}>
-                      <Text style={styles.seta}>›</Text>
+                      <IconeSeta size={18} color={colors.textMuted} />
                     </View>
                   </View>
 
-                  <View style={styles.metricas}>
-                    <View style={styles.metrica}>
-                      <Text style={styles.metricaValor}>
-                        {item.pontos_originais?.length || 0}
+                  {/* Linha 2: Info compacta em uma linha */}
+                  <View style={styles.infoLinha}>
+                    <View style={styles.infoItem}>
+                      <IconeLocalizacao />
+                      <Text style={styles.infoTexto}>
+                        <Text style={styles.infoValor}>
+                          {item.pontos_originais?.length || 0}
+                        </Text>{" "}
+                        paradas
                       </Text>
-                      <Text style={styles.metricaLabel}>paradas</Text>
                     </View>
 
-                    <View style={styles.divisor} />
+                    <View style={styles.infoDot} />
 
-                    <View style={styles.metrica}>
-                      <Text style={styles.metricaValor}>
-                        {(Number(item.distancia_km) || 0).toFixed(1)}
+                    <View style={styles.infoItem}>
+                      <IconeRaio />
+                      <Text style={styles.infoTexto}>
+                        <Text style={styles.infoValor}>
+                          {(Number(item.distancia_km) || 0).toFixed(1)}
+                        </Text>{" "}
+                        km
                       </Text>
-                      <Text style={styles.metricaLabel}>km</Text>
                     </View>
 
-                    <View style={styles.divisor} />
+                    <View style={styles.infoDot} />
 
-                    <View style={styles.metrica}>
-                      <Text style={styles.metricaValor}>
-                        {(Number(item.duracao_min) || 0).toFixed(0)}
+                    <View style={styles.infoItem}>
+                      <IconeCronometro />
+                      <Text style={styles.infoTexto}>
+                        <Text style={styles.infoValor}>
+                          {(Number(item.duracao_min) || 0).toFixed(0)}
+                        </Text>{" "}
+                        min
                       </Text>
-                      <Text style={styles.metricaLabel}>min</Text>
                     </View>
-
-                    {item.horario_saida && (
-                      <>
-                        <View style={styles.divisor} />
-                        <View style={styles.metrica}>
-                          <Text style={styles.metricaValor}>
-                            {item.horario_saida.slice(0, 5)}
-                          </Text>
-                          <Text style={styles.metricaLabel}>saída</Text>
-                        </View>
-                      </>
-                    )}
                   </View>
                 </View>
               </TouchableOpacity>
@@ -385,14 +435,12 @@ export default function Home() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
 
-  header: {
-    backgroundColor: colors.primaryDark,
-    paddingHorizontal: 20,
-    paddingTop: 8,
-    paddingBottom: 16,
-    borderBottomLeftRadius: 24,
-    borderBottomRightRadius: 24,
-  },
+header: {
+  backgroundColor: colors.primaryDark,
+  borderBottomLeftRadius: 24,
+  borderBottomRightRadius: 24,
+  overflow: "hidden",
+},
 
   headerTop: {
     flexDirection: "row",
@@ -416,17 +464,11 @@ const styles = StyleSheet.create({
   horaBadge: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 5,
+    gap: 4,
     backgroundColor: "rgba(255,255,255,0.1)",
     paddingHorizontal: 8,
-    paddingVertical: 2,
+    paddingVertical: 3,
     borderRadius: 8,
-  },
-  horaPonto: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: colors.success,
   },
   horaTexto: {
     color: colors.white,
@@ -434,7 +476,6 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
 
-  // Nova área de perfil (direita)
   perfilContainer: {
     flexDirection: "row",
     alignItems: "center",
@@ -494,11 +535,8 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     flexDirection: "row",
     alignItems: "center",
+    gap: 10,
     marginBottom: 12,
-  },
-  buscaIcon: {
-    fontSize: 16,
-    marginRight: 8,
   },
   buscaInput: {
     flex: 1,
@@ -506,17 +544,16 @@ const styles = StyleSheet.create({
     fontSize: 15,
     padding: 0,
   },
-  buscaClear: {
-    color: "rgba(255,255,255,0.7)",
-    fontSize: 18,
-    fontWeight: "bold",
-    paddingHorizontal: 8,
-  },
 
-  filtrosContainer: {
-    flexDirection: "row",
-    gap: 8,
-  },
+filtrosContainer: {
+  flexDirection: "row",
+  gap: 8,
+  paddingRight: 18,
+  paddingLeft: 78,  // 18 + 48(avatar) + 12(gap)
+  paddingBottom: 16,
+  marginTop: -8,
+},
+
   filtroBtn: {
     flexDirection: "row",
     alignItems: "center",
@@ -590,12 +627,6 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
 
-  lista: {
-    padding: 20,
-    paddingTop: 8,
-    paddingBottom: 40,
-    gap: 12,
-  },
   loading: {
     flex: 1,
     alignItems: "center",
@@ -607,22 +638,20 @@ const styles = StyleSheet.create({
     marginTop: 12,
     fontSize: 13,
   },
+
   vazio: {
     alignItems: "center",
     justifyContent: "center",
     paddingVertical: 60,
     paddingHorizontal: 40,
-  },
-  vazioEmoji: {
-    fontSize: 56,
-    marginBottom: 12,
+    gap: 12,
   },
   vazioTitulo: {
     fontSize: 16,
     fontWeight: "700",
     color: colors.textPrimary,
     textAlign: "center",
-    marginBottom: 4,
+    marginTop: 4,
   },
   vazioTexto: {
     fontSize: 13,
@@ -631,44 +660,51 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
 
+  // 🆕 CARD COMPACTO E MODERNO
   card: {
     backgroundColor: colors.white,
     borderRadius: 16,
     overflow: "hidden",
     flexDirection: "row",
-    ...shadows.md,
+    ...shadows.sm,
+    borderWidth: 1,
+    borderColor: "rgba(0,0,0,0.04)",
   },
   cardDestaque: {
-    borderWidth: 2,
-    borderColor: colors.primary,
+    borderWidth: 1.5,
+    borderColor: colors.primary + "40",
+    ...shadows.md,
   },
   corLateral: {
-    width: 6,
+    width: 5,
   },
   cardConteudo: {
     flex: 1,
-    padding: 16,
+    padding: 14,
+    paddingLeft: 14,
   },
-  cardHeader: {
+  cardTopo: {
     flexDirection: "row",
     alignItems: "flex-start",
-    marginBottom: 12,
+    marginBottom: 10,
   },
   cardNome: {
     fontSize: 16,
     fontWeight: "800",
     color: colors.textPrimary,
-    marginBottom: 4,
+    marginBottom: 6,
+    letterSpacing: -0.2,
   },
   tagsRow: {
     flexDirection: "row",
-    gap: 6,
+    gap: 5,
     flexWrap: "wrap",
+    alignItems: "center",
   },
   tag: {
     backgroundColor: colors.borderLight,
     paddingHorizontal: 8,
-    paddingVertical: 2,
+    paddingVertical: 3,
     borderRadius: 6,
   },
   tagAtiva: {
@@ -676,14 +712,29 @@ const styles = StyleSheet.create({
   },
   tagTexto: {
     fontSize: 10,
-    fontWeight: "700",
+    fontWeight: "800",
     color: colors.textSecondary,
     textTransform: "uppercase",
-    letterSpacing: 0.3,
+    letterSpacing: 0.4,
   },
   tagTextoAtiva: {
     color: colors.white,
   },
+  tagHorario: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: colors.primary + "12",
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  tagHorarioTexto: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: colors.primary,
+  },
+
   setaContainer: {
     width: 28,
     height: 28,
@@ -693,38 +744,32 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginLeft: 8,
   },
-  seta: {
-    fontSize: 20,
-    color: colors.textSecondary,
-    fontWeight: "700",
-    lineHeight: 22,
-  },
-  metricas: {
+
+  // 🆕 Linha de info compacta
+  infoLinha: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: colors.borderLight,
-    borderRadius: 10,
-    paddingVertical: 8,
+    gap: 10,
   },
-  metrica: {
-    flex: 1,
+  infoItem: {
+    flexDirection: "row",
     alignItems: "center",
+    gap: 5,
   },
-  metricaValor: {
-    fontSize: 15,
-    fontWeight: "800",
-    color: colors.textPrimary,
-  },
-  metricaLabel: {
-    fontSize: 10,
-    color: colors.textMuted,
-    marginTop: 2,
-    textTransform: "uppercase",
+  infoTexto: {
+    fontSize: 13,
+    color: colors.textSecondary,
     fontWeight: "600",
   },
-  divisor: {
-    width: 1,
-    height: 20,
+  infoValor: {
+    color: colors.textPrimary,
+    fontWeight: "800",
+    fontSize: 14,
+  },
+  infoDot: {
+    width: 3,
+    height: 3,
+    borderRadius: 1.5,
     backgroundColor: colors.border,
   },
 });

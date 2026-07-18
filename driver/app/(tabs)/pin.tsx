@@ -687,12 +687,13 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
 
-  body: {
+    body: {
     flex: 1,
     padding: 24,
+    paddingBottom: 100,
     justifyContent: "center",
   },
-
+  
   iconeContainer: {
     alignItems: "center",
     marginBottom: 24,

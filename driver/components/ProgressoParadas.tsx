@@ -1,118 +1,169 @@
-import { View, Text, StyleSheet } from "react-native";
+import { useEffect, useRef } from "react";
+import { View, Text, StyleSheet, Animated } from "react-native";
 import { colors } from "../theme/colors";
 
 interface ProgressoParadasProps {
   total: number;
-  atual: number; // índice da próxima parada (0-based)
+  atual: number; // índice da parada atual (0-based)
+  concluidas?: number; // opcional: quantidade concluída
 }
 
 export default function ProgressoParadas({
   total,
   atual,
+  concluidas,
 }: ProgressoParadasProps) {
-  if (total === 0) return null;
+  const qtdConcluidas = concluidas ?? atual;
+  const percentual = total > 0 ? (qtdConcluidas / total) * 100 : 0;
+
+  // Animação suave da barra
+  const larguraAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.spring(larguraAnim, {
+      toValue: percentual,
+      tension: 40,
+      friction: 8,
+      useNativeDriver: false,
+    }).start();
+  }, [percentual, larguraAnim]);
+
+  const larguraInterpolada = larguraAnim.interpolate({
+    inputRange: [0, 100],
+    outputRange: ["0%", "100%"],
+    extrapolate: "clamp",
+  });
 
   return (
     <View style={styles.container}>
-      <View style={styles.barra}>
-        <View
-          style={[
-            styles.progresso,
-            { width: `${(atual / (total - 1 || 1)) * 100}%` },
-          ]}
-        />
+      {/* Header com contador */}
+      <View style={styles.header}>
+        <Text style={styles.label}>PROGRESSO DA ROTA</Text>
+        <Text style={styles.contador}>
+          <Text style={styles.contadorAtual}>{qtdConcluidas}</Text>
+          <Text style={styles.contadorTotal}> / {total} paradas</Text>
+        </Text>
       </View>
 
-      <View style={styles.bolinhas}>
-        {Array.from({ length: total }).map((_, i) => {
-          const concluida = i < atual;
-          const ehAtual = i === atual;
-          return (
-            <View
-              key={i}
-              style={[
-                styles.bolinha,
-                concluida && styles.bolinhaConcluida,
-                ehAtual && styles.bolinhaAtual,
-              ]}
-            >
-              {concluida ? (
-                <Text style={styles.check}>✓</Text>
-              ) : (
-                <Text
-                  style={[
-                    styles.numero,
-                    ehAtual && styles.numeroAtual,
-                  ]}
-                >
-                  {i + 1}
-                </Text>
-              )}
-            </View>
-          );
-        })}
+      {/* Barra de progresso */}
+      <View style={styles.barraFundo}>
+        <Animated.View
+          style={[
+            styles.barraPreenchida,
+            { width: larguraInterpolada },
+          ]}
+        />
+        {/* Bolinhas de marcação (se poucas paradas) */}
+        {total <= 8 && (
+          <View style={styles.marcadores}>
+            {Array.from({ length: total }).map((_, i) => (
+              <View
+                key={i}
+                style={[
+                  styles.marcador,
+                  i < qtdConcluidas && styles.marcadorConcluido,
+                  i === atual && styles.marcadorAtual,
+                ]}
+              />
+            ))}
+          </View>
+        )}
       </View>
+
+      {/* Próxima parada em destaque */}
+      {atual < total && (
+        <Text style={styles.proximaLabel}>
+          Próxima:{" "}
+          <Text style={styles.proximaNumero}>
+            Parada {atual + 1}
+            {atual === total - 1 ? " (final)" : ""}
+          </Text>
+        </Text>
+      )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    position: "relative",
-    paddingVertical: 12,
-    paddingHorizontal: 4,
+    width: "100%",
   },
-  barra: {
-    position: "absolute",
-    top: "50%",
-    left: 20,
-    right: 20,
-    height: 3,
-    backgroundColor: "rgba(255,255,255,0.2)",
-    borderRadius: 2,
-  },
-  progresso: {
-    height: "100%",
-    backgroundColor: colors.white,
-    borderRadius: 2,
-  },
-  bolinhas: {
+  header: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
+    marginBottom: 8,
   },
-  bolinha: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: "rgba(255,255,255,0.2)",
-    borderWidth: 2,
-    borderColor: "rgba(255,255,255,0.3)",
-    alignItems: "center",
-    justifyContent: "center",
+  label: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: "rgba(255,255,255,0.7)",
+    letterSpacing: 0.8,
   },
-  bolinhaConcluida: {
-    backgroundColor: colors.white,
-    borderColor: colors.white,
+  contador: {
+    fontSize: 13,
+    fontWeight: "700",
   },
-  bolinhaAtual: {
-    backgroundColor: colors.primary,
-    borderColor: colors.white,
-    transform: [{ scale: 1.15 }],
-  },
-  check: {
-    color: colors.primary,
-    fontSize: 14,
+  contadorAtual: {
+    color: colors.white,
+    fontSize: 15,
     fontWeight: "900",
   },
-  numero: {
+  contadorTotal: {
     color: "rgba(255,255,255,0.6)",
     fontSize: 12,
-    fontWeight: "800",
+    fontWeight: "600",
   },
-  numeroAtual: {
+
+  barraFundo: {
+    height: 8,
+    backgroundColor: "rgba(255,255,255,0.15)",
+    borderRadius: 4,
+    overflow: "hidden",
+    position: "relative",
+  },
+  barraPreenchida: {
+    height: "100%",
+    backgroundColor: colors.primary,
+    borderRadius: 4,
+  },
+  marcadores: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    paddingHorizontal: 3,
+    alignItems: "center",
+  },
+  marcador: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: "rgba(255,255,255,0.4)",
+  },
+  marcadorConcluido: {
+    backgroundColor: colors.white,
+  },
+  marcadorAtual: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: colors.white,
+    borderWidth: 2,
+    borderColor: colors.primary,
+  },
+
+  proximaLabel: {
+    fontSize: 11,
+    color: "rgba(255,255,255,0.7)",
+    fontWeight: "600",
+    marginTop: 6,
+  },
+  proximaNumero: {
     color: colors.white,
-    fontSize: 12,
     fontWeight: "900",
   },
 });

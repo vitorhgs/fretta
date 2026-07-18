@@ -21,11 +21,13 @@ import MapView, {
 import * as Location from "expo-location";
 import * as Haptics from "expo-haptics";
 import Svg, { Path } from "react-native-svg";
+import { useKeepAwake } from "expo-keep-awake";
 
 import { supabase } from "../supabase";
 import { colors, shadows } from "../theme/colors";
 import { useAuth } from "../contexts/AuthContext";
 import { useEnviarPosicao } from "../hooks/useEnviarPosicao";
+import { useDetectorDesvio } from "../hooks/useDetectorDesvio";
 import {
   criarViagem,
   atualizarViagem,
@@ -34,6 +36,7 @@ import {
 import MarcadorVeiculo from "../components/MarcadorVeiculo";
 import HUDVelocidade from "../components/HUDVelocidade";
 import ProgressoParadas from "../components/ProgressoParadas";
+import AlertaDesvio from "../components/AlertaDesvio";
 import {
   calcularHeading,
   msParaKmh,
@@ -43,6 +46,9 @@ import {
   formatarDistancia,
 } from "../lib/gps";
 import { estiloAutomatico } from "../lib/mapStyles";
+import CardArrastavel from "../components/CardArrastavel";
+import BotaoSOS from "../components/BotaoSOS";
+
 
 /* =========================
    TIPOS
@@ -110,6 +116,24 @@ function IconeSucesso() {
   );
 }
 
+// 🆕 SVG check pequeno pros marcadores
+function IconeCheckMarker() {
+  return (
+    <Svg width={16} height={16} viewBox="0 0 24 24" fill={colors.white}>
+      <Path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z" />
+    </Svg>
+  );
+}
+
+// 🆕 SVG bandeira pequena pros marcadores
+function IconeBandeiraMarker() {
+  return (
+    <Svg width={16} height={16} viewBox="0 0 24 24" fill={colors.white}>
+      <Path d="M14.4 6L14 4H5v17h2v-7h5.6l.4 2h7V6h-5.6z" />
+    </Svg>
+  );
+}
+
 /* =========================
    HELPERS
 ========================= */
@@ -143,6 +167,9 @@ function normalizarLista(lista: any[]): Ponto[] {
 export default function Navegacao() {
   const { rotaId } = useLocalSearchParams();
   const router = useRouter();
+
+  // 🔋 Mantém a tela acordada durante toda a navegação
+  useKeepAwake();
 
   // Auth (tempo real)
   const { motorista } = useAuth();
@@ -189,6 +216,7 @@ export default function Navegacao() {
   const ultimaPos = useRef<Ponto | null>(null);
   const paradaAtualIdxRef = useRef(0);
   const paradasConcluidasRef = useRef<Set<number>>(new Set());
+  const [cardAberto, setCardAberto] = useState(false); // 🆕 controla visibilidade do HUD
 
   // 🆕 Hook de envio de posição pro Supabase
   useEnviarPosicao({
@@ -199,6 +227,16 @@ export default function Navegacao() {
     emViagem: emViagem,
     viagemId: viagemId,
     intervalo: 10000,
+  });
+
+  // 🆕 Detector de desvio de rota (com tempo dinâmico por velocidade)
+  const { emDesvio, distanciaAtual } = useDetectorDesvio({
+    localizacao: minhaLocalizacao,
+    rota: normalizarLista(rota?.pontos_snap || []),
+    emViagem: emViagem,
+    viagemId: viagemId,
+    velocidade: velocidade,
+    tolerancia: 50,
   });
 
   useEffect(() => {
@@ -630,28 +668,28 @@ export default function Navegacao() {
   };
 
   const togglePausa = () => {
-  if (emPausa) {
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    setEmPausa(false);
-    inicioViagem.current = Date.now() - tempoDecorrido * 1000;
-    timerViagem.current = setInterval(() => {
-      setTempoDecorrido(
-        Math.floor((Date.now() - inicioViagem.current) / 1000)
-      );
-    }, 1000);
-    setSeguirVeiculo(true);
-    aplicarCameraViagem();
-    mostrarToast("Viagem retomada");
-  } else {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    setEmPausa(true);
-    if (timerViagem.current) {
-      clearInterval(timerViagem.current);
-      timerViagem.current = null;
+    if (emPausa) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      setEmPausa(false);
+      inicioViagem.current = Date.now() - tempoDecorrido * 1000;
+      timerViagem.current = setInterval(() => {
+        setTempoDecorrido(
+          Math.floor((Date.now() - inicioViagem.current) / 1000)
+        );
+      }, 1000);
+      setSeguirVeiculo(true);
+      aplicarCameraViagem();
+      mostrarToast("Viagem retomada");
+    } else {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      setEmPausa(true);
+      if (timerViagem.current) {
+        clearInterval(timerViagem.current);
+        timerViagem.current = null;
+      }
+      mostrarToast("Viagem pausada");
     }
-    mostrarToast("Viagem pausada");
-  }
-};
+  };
 
   const finalizarERetornar = () => {
     router.back();
@@ -800,9 +838,9 @@ export default function Navegacao() {
                 ]}
               >
                 {concluida ? (
-                  <Text style={styles.markerCheck}>✓</Text>
+                  <IconeCheckMarker />
                 ) : ehUltima ? (
-                  <Text style={styles.markerBandeira}>🏁</Text>
+                  <IconeBandeiraMarker />
                 ) : (
                   <Text
                     style={[
@@ -852,11 +890,15 @@ export default function Navegacao() {
           <View style={{ width: 44 }} />
         </View>
 
-        {emViagem && paradasTotais > 0 && (
-          <View style={styles.progressoContainer}>
-            <ProgressoParadas total={paradasTotais} atual={paradaAtualIdx} />
-          </View>
-        )}
+         {emViagem && paradasTotais > 0 && (
+        <       View style={styles.progressoContainer}>
+                  <ProgressoParadas
+          total={paradasTotais}
+          atual={paradaAtualIdx}
+          concluidas={paradasConcluidas.size}
+    />
+  </View>
+)}
       </SafeAreaView>
 
       {/* TOAST */}
@@ -872,139 +914,158 @@ export default function Navegacao() {
         </Animated.View>
       )}
 
-      {/* HUD VELOCIDADE */}
-      {emViagem && (
-        <View style={styles.hudContainer}>
-          <HUDVelocidade velocidade={velocidade} limite={40} />
-        </View>
-      )}
+      {/* ALERTA DE DESVIO */}
+      <AlertaDesvio visivel={emDesvio} distancia={distanciaAtual} />
+
+      {/* HUD VELOCIDADE (some quando card está aberto) */}
+<       View style={styles.hudContainer}>
+          <HUDVelocidade
+            velocidade={velocidade}
+            limite={40}
+            visivel={emViagem && !cardAberto}
+            />
+            </View>
 
       {/* BOTÃO RECENTRALIZAR */}
-      {!seguirVeiculo && (
-        <TouchableOpacity
-          style={styles.btnRecentralizar}
-          onPress={recentralizarNoVeiculo}
-        >
-          <IconeRecentralizar />
-        </TouchableOpacity>
+      {!seguirVeiculo && !cardAberto && (
+  <TouchableOpacity
+    style={styles.btnRecentralizar}
+    onPress={recentralizarNoVeiculo}
+  >
+    <IconeRecentralizar />
+  </TouchableOpacity>
+)}
+
+      
+
+      {/* CARD INFERIOR ARRASTÁVEL */}
+        <CardArrastavel
+          emViagem={emViagem}
+          paradaAtualIdx={paradaAtualIdx}
+          onEstadoChange={setCardAberto}
+          paradas={paradasNormalizadas.map((_, i) => ({
+      nome:
+      rota.paradas_info?.[i]?.nome ||
+      (i === paradasTotais - 1 ? "Destino final" : `Parada ${i + 1}`),
+    endereco: rota.paradas_info?.[i]?.endereco,
+    concluida: paradasConcluidas.has(i),
+    ehAtual: i === paradaAtualIdx && emViagem && !paradasConcluidas.has(i),
+    ehUltima: i === paradasTotais - 1,
+    distancia: i === paradaAtualIdx ? distAteProxima : undefined,
+  }))}
+>
+  <View style={styles.cardHeader}>
+    <View style={{ flex: 1 }}>
+      <Text style={styles.cardLabel}>
+        {emViagem ? "PRÓXIMA PARADA" : "PRONTO PARA COMEÇAR"}
+      </Text>
+      <Text style={styles.cardTitulo}>{nomeProxima}</Text>
+      {emViagem && infoProximaParada?.endereco && (
+        <Text style={styles.cardEndereco} numberOfLines={1}>
+          {infoProximaParada.endereco}
+        </Text>
       )}
+      {!emViagem && enderecoAtual && (
+        <Text style={styles.cardEndereco} numberOfLines={1}>
+          Você está em: {enderecoAtual}
+        </Text>
+      )}
+    </View>
 
-      {/* CARD INFERIOR */}
-      <SafeAreaView edges={["bottom"]} style={styles.cardWrapper}>
-        <View style={styles.card}>
-          <View style={styles.cardHeader}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.cardLabel}>
-                {emViagem ? "PRÓXIMA PARADA" : "PRONTO PARA COMEÇAR"}
-              </Text>
-              <Text style={styles.cardTitulo}>{nomeProxima}</Text>
-              {emViagem && infoProximaParada?.endereco && (
-                <Text style={styles.cardEndereco} numberOfLines={1}>
-                  {infoProximaParada.endereco}
-                </Text>
-              )}
-              {!emViagem && enderecoAtual && (
-                <Text style={styles.cardEndereco} numberOfLines={1}>
-                  Você está em: {enderecoAtual}
-                </Text>
-              )}
-            </View>
+    {emViagem && distAteProxima > 0 && (
+      <View
+        style={[
+          styles.badgeDistancia,
+          distAteProxima <= RAIO_APROXIMACAO && styles.badgeAproximando,
+        ]}
+      >
+        <Text style={styles.badgeDistanciaValor}>
+          {formatarDistancia(distAteProxima)}
+        </Text>
+        <Text style={styles.badgeDistanciaLabel}>até chegar</Text>
+      </View>
+    )}
+  </View>
 
-            {emViagem && distAteProxima > 0 && (
-              <View
-                style={[
-                  styles.badgeDistancia,
-                  distAteProxima <= RAIO_APROXIMACAO && styles.badgeAproximando,
-                ]}
-              >
-                <Text style={styles.badgeDistanciaValor}>
-                  {formatarDistancia(distAteProxima)}
-                </Text>
-                <Text style={styles.badgeDistanciaLabel}>até chegar</Text>
-              </View>
-            )}
-          </View>
+  {emViagem && (
+    <View style={styles.metricas}>
+      <View style={styles.metrica}>
+        <Text style={styles.metricaValor}>
+          {formatarTempo(tempoDecorrido)}
+        </Text>
+        <Text style={styles.metricaLabel}>tempo</Text>
+      </View>
+      <View style={styles.divisor} />
+      <View style={styles.metrica}>
+        <Text style={styles.metricaValor}>
+          {paradasConcluidas.size}/{paradasTotais}
+        </Text>
+        <Text style={styles.metricaLabel}>paradas</Text>
+      </View>
+      <View style={styles.divisor} />
+      <View style={styles.metrica}>
+        <Text style={styles.metricaValor}>{velocidade}</Text>
+        <Text style={styles.metricaLabel}>km/h</Text>
+      </View>
+    </View>
+  )}
 
-          {emViagem && (
-            <View style={styles.metricas}>
-              <View style={styles.metrica}>
-                <Text style={styles.metricaValor}>
-                  {formatarTempo(tempoDecorrido)}
-                </Text>
-                <Text style={styles.metricaLabel}>tempo</Text>
-              </View>
-              <View style={styles.divisor} />
-              <View style={styles.metrica}>
-                <Text style={styles.metricaValor}>
-                  {paradasConcluidas.size}/{paradasTotais}
-                </Text>
-                <Text style={styles.metricaLabel}>paradas</Text>
-              </View>
-              <View style={styles.divisor} />
-              <View style={styles.metrica}>
-                <Text style={styles.metricaValor}>{velocidade}</Text>
-                <Text style={styles.metricaLabel}>km/h</Text>
-              </View>
-            </View>
-          )}
-
-          {!emViagem ? (
-            <TouchableOpacity
-              style={[styles.btnPrimario, buscandoGPS && styles.btnDisabled]}
-              onPress={iniciarViagem}
-              activeOpacity={0.85}
-              disabled={buscandoGPS}
-            >
-              {buscandoGPS ? (
-                <>
-                  <ActivityIndicator color={colors.white} size="small" />
-                  <Text style={styles.btnPrimarioTexto}>
-                    Buscando localização...
-                  </Text>
-                </>
-              ) : (
-                <>
-                  <IconePlay />
-                  <Text style={styles.btnPrimarioTexto}>Iniciar Viagem</Text>
-                </>
-              )}
-            </TouchableOpacity>
-          ) : (
-  <View style={styles.botoesViagem}>
+  {!emViagem ? (
     <TouchableOpacity
-      style={[styles.btnPausa, emPausa && styles.btnRetomar]}
-      onPress={togglePausa}
+      style={[styles.btnPrimario, buscandoGPS && styles.btnDisabled]}
+      onPress={iniciarViagem}
       activeOpacity={0.85}
+      disabled={buscandoGPS}
     >
-      {emPausa ? (
+      {buscandoGPS ? (
         <>
-          <Svg width={18} height={18} viewBox="0 0 24 24" fill={colors.white}>
-            <Path d="M8 5v14l11-7z" />
-          </Svg>
-          <Text style={styles.btnPausaTexto}>Retomar</Text>
+          <ActivityIndicator color={colors.white} size="small" />
+          <Text style={styles.btnPrimarioTexto}>
+            Buscando localização...
+          </Text>
         </>
       ) : (
         <>
-          <Svg width={18} height={18} viewBox="0 0 24 24" fill={colors.white}>
-            <Path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
-          </Svg>
-          <Text style={styles.btnPausaTexto}>Pausar</Text>
+          <IconePlay />
+          <Text style={styles.btnPrimarioTexto}>Iniciar Viagem</Text>
         </>
       )}
     </TouchableOpacity>
+  ) : (
+    <View style={styles.botoesViagem}>
+      <TouchableOpacity
+        style={[styles.btnPausa, emPausa && styles.btnRetomar]}
+        onPress={togglePausa}
+        activeOpacity={0.85}
+      >
+        {emPausa ? (
+          <>
+            <Svg width={18} height={18} viewBox="0 0 24 24" fill={colors.white}>
+              <Path d="M8 5v14l11-7z" />
+            </Svg>
+            <Text style={styles.btnPausaTexto}>Retomar</Text>
+          </>
+        ) : (
+          <>
+            <Svg width={18} height={18} viewBox="0 0 24 24" fill={colors.white}>
+              <Path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
+            </Svg>
+            <Text style={styles.btnPausaTexto}>Pausar</Text>
+          </>
+        )}
+      </TouchableOpacity>
 
-    <TouchableOpacity
-      style={styles.btnConcluir}
-      onPress={confirmarEncerrar}
-      activeOpacity={0.85}
-    >
-      <IconeBandeira />
-      <Text style={styles.btnConcluirTexto}>Concluir</Text>
-    </TouchableOpacity>
-  </View>
-)}
-        </View>
-      </SafeAreaView>
+      <TouchableOpacity
+        style={styles.btnConcluir}
+        onPress={confirmarEncerrar}
+        activeOpacity={0.85}
+      >
+        <IconeBandeira />
+        <Text style={styles.btnConcluirTexto}>Concluir</Text>
+      </TouchableOpacity>
+    </View>
+  )}
+</CardArrastavel>
 
       {/* MODAL DE VIAGEM CONCLUÍDA */}
       {viagemConcluida && (
@@ -1148,68 +1209,65 @@ const styles = StyleSheet.create({
   position: "absolute",
   bottom: 300,
   left: 16,
-},  
+  zIndex: 10,
+},
 
-    btnRecentralizar: {
-    position: "absolute",
-    right: 16,
-    bottom: 320,
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    backgroundColor: colors.white,
-    alignItems: "center",
-    justifyContent: "center",
-    ...shadows.lg,
-  },
+btnRecentralizar: {
+  position: "absolute",
+  right: 16,
+  bottom: 300,
+  zIndex: 10,
+  width: 52,
+  height: 52,
+  borderRadius: 26,
+  backgroundColor: colors.white,
+  alignItems: "center",
+  justifyContent: "center",
+  ...shadows.lg,
+},
 
+  // 🆕 Marcadores mais visíveis
   markerParada: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
     backgroundColor: colors.white,
     borderWidth: 2.5,
     borderColor: colors.primary,
     alignItems: "center",
     justifyContent: "center",
-    opacity: 0.55,
+    opacity: 0.85,
     ...shadows.md,
   },
   markerAtual: {
     backgroundColor: colors.primary,
     borderColor: colors.white,
     borderWidth: 3,
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
     opacity: 1,
   },
   markerConcluida: {
     backgroundColor: colors.success,
-    borderColor: colors.success,
-    opacity: 0.4,
+    borderColor: colors.white,
+    borderWidth: 2.5,
+    opacity: 0.85,
   },
   markerUltima: {
     backgroundColor: colors.textPrimary,
-    borderColor: colors.textPrimary,
-    opacity: 0.7,
+    borderColor: colors.white,
+    borderWidth: 2.5,
+    opacity: 0.9,
   },
   markerNumero: {
     color: colors.primary,
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: "900",
   },
   markerNumeroAtual: {
     color: colors.white,
-    fontSize: 14,
-  },
-  markerCheck: {
-    color: colors.white,
-    fontSize: 14,
-    fontWeight: "900",
-  },
-  markerBandeira: {
-    fontSize: 14,
+    fontSize: 15,
   },
 
   cardWrapper: {
@@ -1218,11 +1276,11 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
   },
- card: {
-  backgroundColor: colors.white,
-  borderTopLeftRadius: 24,
-  borderTopRightRadius: 24,
-  padding: 16,
+  card: {
+    backgroundColor: colors.white,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 16,
     ...shadows.lg,
   },
   cardHeader: {
@@ -1316,6 +1374,7 @@ const styles = StyleSheet.create({
     opacity: 0.7,
   },
   btnConcluir: {
+    flex: 1,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
@@ -1409,27 +1468,26 @@ const styles = StyleSheet.create({
   },
 
   botoesViagem: {
-  flexDirection: "row",
-  gap: 10,
-},
-btnPausa: {
-  flex: 1,
-  flexDirection: "row",
-  alignItems: "center",
-  justifyContent: "center",
-  gap: 6,
-  backgroundColor: colors.warning,
-  paddingVertical: 14,
-  borderRadius: 16,
-  ...shadows.md,
-},
-btnRetomar: {
-  backgroundColor: colors.primary,
-},
-btnPausaTexto: {
-  color: colors.white,
-  fontSize: 15,
-  fontWeight: "900",
-},
-
+    flexDirection: "row",
+    gap: 10,
+  },
+  btnPausa: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    backgroundColor: colors.warning,
+    paddingVertical: 14,
+    borderRadius: 16,
+    ...shadows.md,
+  },
+  btnRetomar: {
+    backgroundColor: colors.primary,
+  },
+  btnPausaTexto: {
+    color: colors.white,
+    fontSize: 15,
+    fontWeight: "900",
+  },
 });

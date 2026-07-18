@@ -14,6 +14,7 @@ import ProtectedRoute from "./components/ProtectedRoute";
 import Sidebar from "./components/Sidebar";
 import Header from "./components/Header";
 import AoVivo from "./pages/AoVivo";
+import Notificacoes from "./pages/Notificacoes";
 
 function AppLayout() {
   const { empresa } = useAuth();
@@ -38,6 +39,7 @@ function AppLayout() {
             <Route path="/ao-vivo" element={<AoVivo />} />
             <Route path="/historico" element={<Historico />} />
             <Route path="/configuracoes" element={<Configuracoes />} />
+            <Route path="/notificacoes" element={<Notificacoes />} />
           </Routes>
         </main>
       </div>

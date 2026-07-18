@@ -5,15 +5,88 @@ import { colors } from "../theme/colors";
 interface HUDVelocidadeProps {
   velocidade: number;
   limite?: number;
+  visivel?: boolean; // 🆕 controla entrada/saída animada
 }
 
 export default function HUDVelocidade({
   velocidade,
   limite = 40,
+  visivel = true,
 }: HUDVelocidadeProps) {
   const excedendo = velocidade > limite;
-  const piscarAnim = useRef(new Animated.Value(1)).current;
 
+  // Animações
+  const piscarAnim = useRef(new Animated.Value(1)).current;
+  const entradaOpacity = useRef(new Animated.Value(0)).current;
+  const entradaScale = useRef(new Animated.Value(0.5)).current;
+  const placaScale = useRef(new Animated.Value(0)).current;
+  const placaOpacity = useRef(new Animated.Value(0)).current;
+
+  // 🆕 Animação de entrada/saída do HUD principal
+  useEffect(() => {
+    if (visivel) {
+      Animated.parallel([
+        Animated.timing(entradaOpacity, {
+          toValue: 1,
+          duration: 400,
+          useNativeDriver: true,
+        }),
+        Animated.spring(entradaScale, {
+          toValue: 1,
+          tension: 60,
+          friction: 7,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    } else {
+      Animated.parallel([
+        Animated.timing(entradaOpacity, {
+          toValue: 0,
+          duration: 250,
+          useNativeDriver: true,
+        }),
+        Animated.timing(entradaScale, {
+          toValue: 0.5,
+          duration: 250,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    }
+  }, [visivel, entradaOpacity, entradaScale]);
+
+  // 🆕 Animação da placa (aparece/some com scale)
+  useEffect(() => {
+    if (excedendo) {
+      Animated.parallel([
+        Animated.spring(placaScale, {
+          toValue: 1,
+          tension: 80,
+          friction: 6,
+          useNativeDriver: true,
+        }),
+        Animated.timing(placaOpacity, {
+          toValue: 1,
+          duration: 250,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    } else {
+      Animated.parallel([
+        Animated.timing(placaScale, {
+          toValue: 0,
+          duration: 300,
+          useNativeDriver: true,
+        }),
+        Animated.timing(placaOpacity, {
+          toValue: 0,
+          duration: 300,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    }
+  }, [excedendo, placaScale, placaOpacity]);
+
+  // Pisca quando excede
   useEffect(() => {
     if (excedendo) {
       const loop = Animated.loop(
@@ -35,10 +108,20 @@ export default function HUDVelocidade({
     } else {
       piscarAnim.setValue(1);
     }
-  }, [excedendo]);
+  }, [excedendo, piscarAnim]);
+
+  if (!visivel) return null;
 
   return (
-    <View style={styles.container}>
+    <Animated.View
+      style={[
+        styles.container,
+        {
+          opacity: entradaOpacity,
+          transform: [{ scale: entradaScale }],
+        },
+      ]}
+    >
       {/* Velocidade atual — sempre visível */}
       <Animated.View
         style={[
@@ -58,13 +141,20 @@ export default function HUDVelocidade({
         <Text style={styles.unidade}>km/h</Text>
       </Animated.View>
 
-      {/* Placa de limite — SÓ aparece quando excede */}
-      {excedendo && (
-        <View style={styles.placaLimite}>
-          <Text style={styles.placaNumero}>{limite}</Text>
-        </View>
-      )}
-    </View>
+      {/* Placa de limite — SÓ aparece quando excede (com animação) */}
+      <Animated.View
+        style={[
+          styles.placaLimite,
+          {
+            opacity: placaOpacity,
+            transform: [{ scale: placaScale }],
+          },
+        ]}
+        pointerEvents="none"
+      >
+        <Text style={styles.placaNumero}>{limite}</Text>
+      </Animated.View>
+    </Animated.View>
   );
 }
 
