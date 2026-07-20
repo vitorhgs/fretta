@@ -16,12 +16,12 @@ import {
   UserX,
   LayoutGrid,
   Table as TableIcon,
-  AlertTriangle,
 } from "lucide-react";
 import { supabase } from "../supabase";
 import { useAuth } from "../contexts/AuthContext";
 import type { Motorista } from "../types/database";
 import Modal from "../components/Modal";
+import ConfirmDialog from "../components/ConfirmDialog";
 import FormMotorista from "../components/motoristas/FormMotorista";
 import FormCriarAcesso from "../components/motoristas/FormCriarAcesso";
 import CredenciaisGeradas from "../components/motoristas/CredenciaisGeradas";
@@ -37,6 +37,7 @@ import { FilterTabs } from "../components/ui/FilterTabs";
 import { Avatar } from "../components/ui/Avatar";
 import { EmptyState } from "../components/ui/EmptyState";
 import { Toast, type ToastType } from "../components/ui/Toast";
+import { SkeletonList } from "../components/ui/Skeleton";
 
 type FiltroStatus = "todos" | "ativos" | "inativos";
 type Visualizacao = "cards" | "tabela";
@@ -51,6 +52,7 @@ export default function Motoristas() {
   const [motoristaEditando, setMotoristaEditando] = useState<Motorista | null>(null);
   const [salvando, setSalvando] = useState(false);
   const [confirmarExclusao, setConfirmarExclusao] = useState<Motorista | null>(null);
+  const [excluindo, setExcluindo] = useState(false); // 🆕
   const [visualizacao, setVisualizacao] = useState<Visualizacao>("cards");
   const [mensagem, setMensagem] = useState<{ tipo: ToastType; texto: string } | null>(null);
 
@@ -152,15 +154,23 @@ export default function Motoristas() {
 
   const excluirConfirmado = async () => {
     if (!confirmarExclusao) return;
+    setExcluindo(true);
+
     const { error } = await supabase
       .from("motoristas")
       .delete()
       .eq("id", confirmarExclusao.id);
+
+    setExcluindo(false);
+
     if (error) {
-      setMensagem({ tipo: "erro", texto: "Erro ao excluir" });
+      setMensagem({ tipo: "erro", texto: "Erro ao excluir motorista" });
       return;
     }
-    setMensagem({ tipo: "sucesso", texto: "Motorista excluído" });
+    setMensagem({
+      tipo: "sucesso",
+      texto: `Motorista "${confirmarExclusao.nome}" excluído`,
+    });
     setConfirmarExclusao(null);
     carregarMotoristas();
   };
@@ -210,10 +220,10 @@ export default function Motoristas() {
 
       {/* Stats */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard label="Total" value={stats.total} icon={Users} color="blue" />
-        <StatCard label="Ativos" value={stats.ativos} icon={CheckCircle2} color="emerald" />
-        <StatCard label="Inativos" value={stats.inativos} icon={Ban} color="slate" />
-        <StatCard label="Com acesso ao app" value={stats.comAcesso} icon={Smartphone} color="indigo" />
+        <StatCard label="Total" value={stats.total} icon={Users} color="blue" loading={loading} />
+        <StatCard label="Ativos" value={stats.ativos} icon={CheckCircle2} color="emerald" loading={loading} />
+        <StatCard label="Inativos" value={stats.inativos} icon={Ban} color="slate" loading={loading} />
+        <StatCard label="Com acesso ao app" value={stats.comAcesso} icon={Smartphone} color="indigo" loading={loading} />
       </div>
 
       {/* Filtros */}
@@ -264,11 +274,10 @@ export default function Motoristas() {
         </div>
       </Card>
 
-      {/* Loading */}
+      {/* 🆕 Loading — Skeleton bonito ao invés de spinner */}
       {loading && (
-        <div className="text-center py-12">
-          <div className="inline-block w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
-          <p className="text-slate-500 mt-3">Carregando motoristas...</p>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <SkeletonList count={6} />
         </div>
       )}
 
@@ -558,49 +567,22 @@ export default function Motoristas() {
         />
       </Modal>
 
-      {/* Modal confirmação exclusão */}
-      <Modal
+      {/* 🆕 ConfirmDialog padronizado para exclusão */}
+      <ConfirmDialog
         aberto={!!confirmarExclusao}
         onFechar={() => setConfirmarExclusao(null)}
+        onConfirmar={excluirConfirmado}
         titulo="Excluir motorista?"
-        tamanho="sm"
-      >
-        <div className="p-6">
-          <div className="text-center mb-5">
-            <div className="w-16 h-16 rounded-full bg-red-100 flex items-center justify-center mx-auto mb-3">
-              <AlertTriangle className="w-8 h-8 text-red-600" strokeWidth={2.2} />
-            </div>
-            <p className="text-slate-700">
-              Tem certeza que deseja excluir{" "}
-              <span className="font-bold">"{confirmarExclusao?.nome}"</span>?
-            </p>
-            <p className="text-xs text-red-600 mt-2">
-              Esta ação não pode ser desfeita.
-            </p>
-          </div>
-
-          <div className="flex gap-2">
-            <Button
-              variant="secondary"
-              size="lg"
-              fullWidth
-              onClick={() => setConfirmarExclusao(null)}
-            >
-              Cancelar
-            </Button>
-            <Button
-              variant="primary"
-              size="lg"
-              fullWidth
-              icon={Trash2}
-              onClick={excluirConfirmado}
-              className="!bg-red-600 hover:!bg-red-500 !shadow-red-500/30"
-            >
-              Sim, excluir
-            </Button>
-          </div>
-        </div>
-      </Modal>
+        descricao={
+          confirmarExclusao
+            ? `O motorista "${confirmarExclusao.nome}" será excluído permanentemente. Se ele tinha acesso ao app, também perderá o login. Esta ação não pode ser desfeita.`
+            : ""
+        }
+        textoConfirmar="Sim, excluir"
+        textoCancelar="Cancelar"
+        variant="danger"
+        loading={excluindo}
+      />
 
       {/* Modal criar acesso */}
       <Modal

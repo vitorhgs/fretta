@@ -1,14 +1,17 @@
+import { Sun, CloudSun, Moon, MoonStar, Check } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
+
 interface SeletorTurnosProps {
   turnosSelecionados: string[];
   onChange: (turnos: string[]) => void;
   size?: "sm" | "md";
 }
 
-const TURNOS = [
-  { valor: "Manhã", icone: "☀", horario: "05h-12h" },
-  { valor: "Tarde", icone: "🌤", horario: "12h-18h" },
-  { valor: "Noite", icone: "🌙", horario: "18h-23h" },
-  { valor: "Madrugada", icone: "🌑", horario: "23h-5h" },
+const TURNOS: { valor: string; icon: LucideIcon; horario: string }[] = [
+  { valor: "Manhã", icon: Sun, horario: "05h-12h" },
+  { valor: "Tarde", icon: CloudSun, horario: "12h-18h" },
+  { valor: "Noite", icon: Moon, horario: "18h-23h" },
+  { valor: "Madrugada", icon: MoonStar, horario: "23h-5h" },
 ];
 
 export default function SeletorTurnos({
@@ -30,6 +33,8 @@ export default function SeletorTurnos({
     <div className={`grid grid-cols-2 ${ehSm ? "gap-2" : "gap-3"}`}>
       {TURNOS.map((t) => {
         const ativo = turnosSelecionados.includes(t.valor);
+        const Icon = t.icon;
+
         return (
           <button
             key={t.valor}
@@ -47,7 +52,12 @@ export default function SeletorTurnos({
             `}
           >
             {/* Ícone */}
-            <span className={ehSm ? "text-lg" : "text-xl"}>{t.icone}</span>
+            <Icon
+              className={`${ehSm ? "w-4 h-4" : "w-5 h-5"} ${
+                ativo ? "text-blue-600" : "text-slate-500"
+              }`}
+              strokeWidth={2.2}
+            />
 
             {/* Texto */}
             <div className="flex-1 text-left">
@@ -68,19 +78,7 @@ export default function SeletorTurnos({
             {/* Check */}
             {ativo && (
               <div className="w-5 h-5 rounded-full bg-blue-500 flex items-center justify-center flex-shrink-0">
-                <svg
-                  className="w-3 h-3 text-white"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                  strokeWidth="3"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="M5 13l4 4L19 7"
-                  />
-                </svg>
+                <Check className="w-3 h-3 text-white" strokeWidth={3} />
               </div>
             )}
           </button>

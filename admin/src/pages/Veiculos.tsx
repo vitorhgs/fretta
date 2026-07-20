@@ -1,4 +1,19 @@
 import { useState, useEffect, useMemo } from "react";
+import {
+  Bus,
+  Plus,
+  CheckCircle2,
+  Wrench,
+  Moon,
+  Truck,
+  Pencil,
+  Trash2,
+  AlertTriangle,
+  FileText,
+  Shield,
+  LayoutGrid,
+  Table as TableIcon,
+} from "lucide-react";
 import { supabase } from "../supabase";
 import { useAuth } from "../contexts/AuthContext";
 import type { Veiculo } from "../types/database";
@@ -6,42 +21,55 @@ import Modal from "../components/Modal";
 import FormVeiculo from "../components/veiculos/FormVeiculo";
 import {
   rotulosTipoVeiculo,
-  iconesTipoVeiculo,
   rotulosStatusVeiculo,
-  coresStatusVeiculo,
   formatarData,
 } from "../lib/formatters";
+
+import { PageHeader } from "../components/ui/PageHeader";
+import { StatCard } from "../components/ui/StatCard";
+import { Card } from "../components/ui/Card";
+import { Button } from "../components/ui/Button";
+import { Badge } from "../components/ui/Badge";
+import { SearchInput } from "../components/ui/SearchInput";
+import { FilterTabs } from "../components/ui/FilterTabs";
+import { EmptyState } from "../components/ui/EmptyState";
+import { Toast, type ToastType } from "../components/ui/Toast";
+
+type FiltroStatus = "todos" | "ativo" | "manutencao" | "inativo";
+type Visualizacao = "cards" | "tabela";
+
+/* =========================
+   STATUS CONFIG
+========================= */
+const STATUS_CONFIG: Record<
+  Veiculo["status"],
+  {
+    badge: "green" | "amber" | "slate";
+    label: string;
+    icon: typeof CheckCircle2;
+  }
+> = {
+  ativo: { badge: "green", label: "Ativo", icon: CheckCircle2 },
+  manutencao: { badge: "amber", label: "Manutenção", icon: Wrench },
+  inativo: { badge: "slate", label: "Inativo", icon: Moon },
+};
 
 export default function Veiculos() {
   const { empresa } = useAuth();
   const [veiculos, setVeiculos] = useState<Veiculo[]>([]);
   const [loading, setLoading] = useState(true);
   const [busca, setBusca] = useState("");
-  const [filtroStatus, setFiltroStatus] = useState<
-    "todos" | "ativo" | "manutencao" | "inativo"
-  >("todos");
+  const [filtroStatus, setFiltroStatus] = useState<FiltroStatus>("todos");
   const [modalAberto, setModalAberto] = useState(false);
   const [veiculoEditando, setVeiculoEditando] = useState<Veiculo | null>(null);
   const [salvando, setSalvando] = useState(false);
-  const [confirmarExclusao, setConfirmarExclusao] = useState<Veiculo | null>(
-    null
-  );
-  const [visualizacao, setVisualizacao] = useState<"cards" | "tabela">("cards");
-  const [mensagem, setMensagem] = useState<{
-    tipo: "sucesso" | "erro";
-    texto: string;
-  } | null>(null);
+  const [confirmarExclusao, setConfirmarExclusao] = useState<Veiculo | null>(null);
+  const [visualizacao, setVisualizacao] = useState<Visualizacao>("cards");
+  const [mensagem, setMensagem] = useState<{ tipo: ToastType; texto: string } | null>(null);
 
   useEffect(() => {
     carregarVeiculos();
   }, []);
-
-  useEffect(() => {
-    if (mensagem) {
-      const t = setTimeout(() => setMensagem(null), 3500);
-      return () => clearTimeout(t);
-    }
-  }, [mensagem]);
 
   const carregarVeiculos = async () => {
     setLoading(true);
@@ -70,19 +98,13 @@ export default function Veiculos() {
           .update(dados)
           .eq("id", veiculoEditando.id);
         if (error) throw error;
-        setMensagem({
-          tipo: "sucesso",
-          texto: `Veículo ${dados.placa} atualizado!`,
-        });
+        setMensagem({ tipo: "sucesso", texto: `Veículo ${dados.placa} atualizado!` });
       } else {
         const { error } = await supabase
           .from("veiculos")
           .insert([{ ...dados, empresa_id: empresa.id }]);
         if (error) throw error;
-        setMensagem({
-          tipo: "sucesso",
-          texto: `Veículo ${dados.placa} cadastrado!`,
-        });
+        setMensagem({ tipo: "sucesso", texto: `Veículo ${dados.placa} cadastrado!` });
       }
       setModalAberto(false);
       setVeiculoEditando(null);
@@ -151,7 +173,6 @@ export default function Veiculos() {
     [veiculos]
   );
 
-  // Verifica se documento está próximo do vencimento (30 dias)
   const alertaVencimento = (data?: string): boolean => {
     if (!data) return false;
     const dias = Math.floor(
@@ -168,139 +189,75 @@ export default function Veiculos() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-800">🚌 Veículos</h1>
-          <p className="text-sm text-slate-500 mt-1">
-            Gerencie a frota da sua operação
-          </p>
-        </div>
-        <button
-          onClick={() => {
+      <PageHeader
+        title="Veículos"
+        subtitle="Gerencie a frota da sua operação"
+        action={{
+          label: "Novo Veículo",
+          icon: Plus,
+          onClick: () => {
             setVeiculoEditando(null);
             setModalAberto(true);
-          }}
-          className="bg-blue-600 text-white px-5 py-2.5 rounded-xl font-semibold hover:bg-blue-500 transition active:scale-95 shadow-lg shadow-blue-500/30 flex items-center gap-2"
-        >
-          <span>➕</span> Novo Veículo
-        </button>
-      </div>
+          },
+        }}
+      />
 
       {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        {[
-          { label: "Total", valor: stats.total, icone: "🚌", cor: "blue" },
-          { label: "Ativos", valor: stats.ativos, icone: "✅", cor: "green" },
-          {
-            label: "Manutenção",
-            valor: stats.manutencao,
-            icone: "🔧",
-            cor: "amber",
-          },
-          {
-            label: "Inativos",
-            valor: stats.inativos,
-            icone: "💤",
-            cor: "slate",
-          },
-        ].map((s) => (
-          <div key={s.label} className="bg-white p-5 rounded-2xl border shadow-sm">
-            <div className="flex items-center gap-3">
-              <div
-                className={`w-12 h-12 rounded-xl flex items-center justify-center text-2xl ${
-                  s.cor === "blue"
-                    ? "bg-blue-100"
-                    : s.cor === "green"
-                    ? "bg-green-100"
-                    : s.cor === "amber"
-                    ? "bg-amber-100"
-                    : "bg-slate-100"
-                }`}
-              >
-                {s.icone}
-              </div>
-              <div>
-                <p className="text-xs text-slate-500 uppercase font-semibold tracking-wide">
-                  {s.label}
-                </p>
-                <p
-                  className={`text-2xl font-bold ${
-                    s.cor === "blue"
-                      ? "text-blue-600"
-                      : s.cor === "green"
-                      ? "text-green-600"
-                      : s.cor === "amber"
-                      ? "text-amber-600"
-                      : "text-slate-500"
-                  }`}
-                >
-                  {s.valor}
-                </p>
-              </div>
-            </div>
-          </div>
-        ))}
+        <StatCard label="Total" value={stats.total} icon={Bus} color="blue" />
+        <StatCard label="Ativos" value={stats.ativos} icon={CheckCircle2} color="emerald" />
+        <StatCard label="Manutenção" value={stats.manutencao} icon={Wrench} color="amber" />
+        <StatCard label="Inativos" value={stats.inativos} icon={Moon} color="slate" />
       </div>
 
       {/* Filtros */}
-      <div className="bg-white p-4 rounded-2xl border shadow-sm flex flex-wrap items-center gap-3">
-        <div className="relative flex-1 min-w-[200px]">
-          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
-            🔍
-          </span>
-          <input
-            type="text"
-            placeholder="Buscar por placa, modelo ou marca..."
-            value={busca}
-            onChange={(e) => setBusca(e.target.value)}
-            className="border border-slate-300 pl-10 pr-4 py-2.5 rounded-xl w-full text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+      <Card className="p-4">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex-1 min-w-[240px]">
+            <SearchInput
+              value={busca}
+              onChange={setBusca}
+              placeholder="Buscar por placa, modelo ou marca..."
+            />
+          </div>
+
+          <FilterTabs
+            options={[
+              { value: "todos", label: "Todos" },
+              { value: "ativo", label: "Ativos" },
+              { value: "manutencao", label: "Manutenção" },
+              { value: "inativo", label: "Inativos" },
+            ]}
+            value={filtroStatus}
+            onChange={setFiltroStatus}
           />
-        </div>
 
-        <div className="flex gap-1 bg-slate-100 rounded-xl p-1">
-          {[
-            { v: "todos", l: "Todos" },
-            { v: "ativo", l: "Ativos" },
-            { v: "manutencao", l: "Manutenção" },
-            { v: "inativo", l: "Inativos" },
-          ].map((f) => (
+          <div className="flex gap-1 bg-slate-100 rounded-xl p-1">
             <button
-              key={f.v}
-              onClick={() => setFiltroStatus(f.v as any)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
-                filtroStatus === f.v
-                  ? "bg-white text-blue-700 shadow"
-                  : "text-slate-600 hover:text-slate-800"
+              onClick={() => setVisualizacao("cards")}
+              className={`p-2 rounded-lg transition ${
+                visualizacao === "cards"
+                  ? "bg-white text-blue-700 shadow-sm"
+                  : "text-slate-600"
               }`}
+              title="Visualizar em cards"
             >
-              {f.l}
+              <LayoutGrid className="w-4 h-4" strokeWidth={2.2} />
             </button>
-          ))}
+            <button
+              onClick={() => setVisualizacao("tabela")}
+              className={`p-2 rounded-lg transition ${
+                visualizacao === "tabela"
+                  ? "bg-white text-blue-700 shadow-sm"
+                  : "text-slate-600"
+              }`}
+              title="Visualizar em tabela"
+            >
+              <TableIcon className="w-4 h-4" strokeWidth={2.2} />
+            </button>
+          </div>
         </div>
-
-        <div className="flex gap-1 bg-slate-100 rounded-xl p-1">
-          <button
-            onClick={() => setVisualizacao("cards")}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
-              visualizacao === "cards"
-                ? "bg-white text-blue-700 shadow"
-                : "text-slate-600"
-            }`}
-          >
-            📇
-          </button>
-          <button
-            onClick={() => setVisualizacao("tabela")}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
-              visualizacao === "tabela"
-                ? "bg-white text-blue-700 shadow"
-                : "text-slate-600"
-            }`}
-          >
-            📊
-          </button>
-        </div>
-      </div>
+      </Card>
 
       {/* Loading */}
       {loading && (
@@ -312,272 +269,298 @@ export default function Veiculos() {
 
       {/* Vazio */}
       {!loading && veiculosFiltrados.length === 0 && (
-        <div className="bg-white p-12 rounded-2xl border text-center">
-          <div className="text-6xl mb-3">🚌</div>
-          <h3 className="text-lg font-bold text-slate-800 mb-1">
-            {veiculos.length === 0
-              ? "Nenhum veículo cadastrado"
-              : "Nenhum veículo encontrado"}
-          </h3>
-          <p className="text-slate-500 mb-4 text-sm">
-            {veiculos.length === 0
-              ? "Comece cadastrando o primeiro veículo da sua frota."
-              : "Tente ajustar os filtros de busca."}
-          </p>
-          {veiculos.length === 0 && (
-            <button
-              onClick={() => {
-                setVeiculoEditando(null);
-                setModalAberto(true);
-              }}
-              className="bg-blue-600 text-white px-5 py-2.5 rounded-xl font-semibold hover:bg-blue-500 transition"
-            >
-              ➕ Cadastrar primeiro veículo
-            </button>
-          )}
-        </div>
+        <Card>
+          <EmptyState
+            icon={Truck}
+            title={
+              veiculos.length === 0
+                ? "Nenhum veículo cadastrado"
+                : "Nenhum veículo encontrado"
+            }
+            description={
+              veiculos.length === 0
+                ? "Comece cadastrando o primeiro veículo da sua frota."
+                : "Tente ajustar os filtros de busca."
+            }
+            action={
+              veiculos.length === 0
+                ? {
+                    label: "Cadastrar primeiro veículo",
+                    onClick: () => {
+                      setVeiculoEditando(null);
+                      setModalAberto(true);
+                    },
+                  }
+                : undefined
+            }
+          />
+        </Card>
       )}
 
       {/* Cards */}
-      {!loading &&
-        visualizacao === "cards" &&
-        veiculosFiltrados.length > 0 && (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {veiculosFiltrados.map((v) => {
-              const cores = coresStatusVeiculo[v.status];
-              const licVencido = documentoVencido(v.vencimento_licenciamento);
-              const licProximo = alertaVencimento(v.vencimento_licenciamento);
-              const segVencido = documentoVencido(v.vencimento_seguro);
-              const segProximo = alertaVencimento(v.vencimento_seguro);
-              const temAlerta = licVencido || segVencido;
+      {!loading && visualizacao === "cards" && veiculosFiltrados.length > 0 && (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {veiculosFiltrados.map((v) => {
+            const status = STATUS_CONFIG[v.status];
+            const StatusIcon = status.icon;
+            const licVencido = documentoVencido(v.vencimento_licenciamento);
+            const licProximo = alertaVencimento(v.vencimento_licenciamento);
+            const segVencido = documentoVencido(v.vencimento_seguro);
+            const segProximo = alertaVencimento(v.vencimento_seguro);
+            const temAlerta = licVencido || segVencido;
 
-              return (
-                <div
-                  key={v.id}
-                  className={`bg-white rounded-2xl border shadow-sm overflow-hidden transition hover:shadow-lg relative ${
-                    v.status === "inativo" ? "opacity-70" : ""
-                  }`}
-                >
-                  {/* Badge de alerta */}
-                  {temAlerta && (
-                    <div className="absolute top-3 right-3 bg-red-500 text-white text-[10px] font-bold px-2 py-1 rounded-full shadow-lg z-10">
-                      ⚠️ Documento vencido
-                    </div>
-                  )}
-
-                  {/* Header */}
-                  <div className="p-5 border-b bg-gradient-to-br from-slate-50 to-blue-50/30">
-                    <div className="flex items-start gap-3">
-                      <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center text-3xl shadow-md">
-                        {iconesTipoVeiculo[v.tipo]}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="font-mono font-black text-lg text-slate-800 tracking-wider">
-                          {v.placa}
-                        </p>
-                        <p className="text-sm text-slate-600 truncate">
-                          {v.marca} {v.modelo}
-                        </p>
-                        <span
-                          className={`inline-block mt-1.5 text-[10px] font-bold uppercase px-2 py-0.5 rounded-full ${cores.bg} ${cores.text} border ${cores.border}`}
-                        >
-                          ● {rotulosStatusVeiculo[v.status]}
-                        </span>
-                      </div>
-                    </div>
+            return (
+              <div
+                key={v.id}
+                className={`bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden transition hover:shadow-lg hover:border-slate-300 relative ${
+                  v.status === "inativo" ? "opacity-70" : ""
+                }`}
+              >
+                {/* Badge de alerta */}
+                {temAlerta && (
+                  <div className="absolute top-3 right-3 bg-red-500 text-white text-[10px] font-bold px-2 py-1 rounded-full shadow-lg z-10 flex items-center gap-1">
+                    <AlertTriangle className="w-3 h-3" strokeWidth={2.5} />
+                    Documento vencido
                   </div>
+                )}
 
-                  {/* Info */}
-                  <div className="p-5 space-y-1.5 text-sm">
-                    <div className="grid grid-cols-2 gap-2">
-                      <div className="text-slate-600">
-                        <span className="text-xs text-slate-400">Ano</span>
-                        <p className="font-semibold">{v.ano || "-"}</p>
-                      </div>
-                      <div className="text-slate-600">
-                        <span className="text-xs text-slate-400">
-                          Capacidade
-                        </span>
-                        <p className="font-semibold">
-                          {v.capacidade ? `${v.capacidade} pass.` : "-"}
-                        </p>
-                      </div>
-                      <div className="text-slate-600">
-                        <span className="text-xs text-slate-400">Tipo</span>
-                        <p className="font-semibold">
-                          {rotulosTipoVeiculo[v.tipo]}
-                        </p>
-                      </div>
-                      <div className="text-slate-600">
-                        <span className="text-xs text-slate-400">KM</span>
-                        <p className="font-semibold">
-                          {v.km_atual?.toLocaleString("pt-BR") || "0"}
-                        </p>
+                {/* Header */}
+                <div className="p-5 border-b border-slate-100 bg-gradient-to-br from-slate-50 to-blue-50/30">
+                  <div className="flex items-start gap-3">
+                    <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center shadow-md flex-shrink-0">
+                      <Bus className="w-7 h-7 text-white" strokeWidth={2} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-mono font-black text-lg text-slate-800 tracking-wider">
+                        {v.placa}
+                      </p>
+                      <p className="text-sm text-slate-600 truncate">
+                        {v.marca} {v.modelo}
+                      </p>
+                      <div className="mt-1.5">
+                        <Badge color={status.badge} icon={StatusIcon}>
+                          {status.label}
+                        </Badge>
                       </div>
                     </div>
-
-                    {/* Alertas de vencimento */}
-                    {(licVencido || licProximo) && (
-                      <div
-                        className={`text-xs px-2 py-1 rounded ${
-                          licVencido
-                            ? "bg-red-50 text-red-700 border border-red-200"
-                            : "bg-amber-50 text-amber-700 border border-amber-200"
-                        }`}
-                      >
-                        📋 Licenciamento{" "}
-                        {licVencido ? "VENCIDO" : "vence em breve"}:{" "}
-                        {formatarData(v.vencimento_licenciamento!)}
-                      </div>
-                    )}
-                    {(segVencido || segProximo) && (
-                      <div
-                        className={`text-xs px-2 py-1 rounded ${
-                          segVencido
-                            ? "bg-red-50 text-red-700 border border-red-200"
-                            : "bg-amber-50 text-amber-700 border border-amber-200"
-                        }`}
-                      >
-                        🛡️ Seguro {segVencido ? "VENCIDO" : "vence em breve"}:{" "}
-                        {formatarData(v.vencimento_seguro!)}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Ações */}
-                  <div className="p-3 border-t bg-slate-50 flex gap-2">
-                    <button
-                      onClick={() => {
-                        setVeiculoEditando(v);
-                        setModalAberto(true);
-                      }}
-                      className="flex-1 bg-white border border-slate-300 text-slate-700 py-2 rounded-lg text-xs font-semibold hover:bg-slate-100 transition active:scale-95"
-                    >
-                      ✏️ Editar
-                    </button>
-                    <select
-                      value={v.status}
-                      onChange={(e) =>
-                        alterarStatus(v, e.target.value as Veiculo["status"])
-                      }
-                      className="flex-1 border border-slate-300 rounded-lg text-xs font-semibold px-2 py-2 bg-white cursor-pointer hover:bg-slate-100"
-                    >
-                      <option value="ativo">✅ Ativo</option>
-                      <option value="manutencao">🔧 Manutenção</option>
-                      <option value="inativo">🚫 Inativo</option>
-                    </select>
-                    <button
-                      onClick={() => setConfirmarExclusao(v)}
-                      className="px-3 py-2 rounded-lg text-xs font-semibold bg-red-50 text-red-600 border border-red-200 hover:bg-red-100 transition active:scale-95"
-                    >
-                      🗑️
-                    </button>
                   </div>
                 </div>
-              );
-            })}
-          </div>
-        )}
+
+                {/* Info */}
+                <div className="p-5 space-y-2 text-sm">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <p className="text-[10px] text-slate-400 uppercase font-semibold tracking-wide">
+                        Ano
+                      </p>
+                      <p className="font-semibold text-slate-700">
+                        {v.ano || "-"}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] text-slate-400 uppercase font-semibold tracking-wide">
+                        Capacidade
+                      </p>
+                      <p className="font-semibold text-slate-700">
+                        {v.capacidade ? `${v.capacidade} pass.` : "-"}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] text-slate-400 uppercase font-semibold tracking-wide">
+                        Tipo
+                      </p>
+                      <p className="font-semibold text-slate-700">
+                        {rotulosTipoVeiculo[v.tipo]}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] text-slate-400 uppercase font-semibold tracking-wide">
+                        KM
+                      </p>
+                      <p className="font-semibold text-slate-700">
+                        {v.km_atual?.toLocaleString("pt-BR") || "0"}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Alertas de vencimento */}
+                  {(licVencido || licProximo) && (
+                    <div
+                      className={`flex items-center gap-2 text-xs px-3 py-2 rounded-lg border ${
+                        licVencido
+                          ? "bg-red-50 text-red-700 border-red-200"
+                          : "bg-amber-50 text-amber-700 border-amber-200"
+                      }`}
+                    >
+                      <FileText className="w-3.5 h-3.5 flex-shrink-0" strokeWidth={2} />
+                      <span>
+                        Licenciamento{" "}
+                        <strong>
+                          {licVencido ? "VENCIDO" : "vence em breve"}
+                        </strong>
+                        {" · "}
+                        {formatarData(v.vencimento_licenciamento!)}
+                      </span>
+                    </div>
+                  )}
+                  {(segVencido || segProximo) && (
+                    <div
+                      className={`flex items-center gap-2 text-xs px-3 py-2 rounded-lg border ${
+                        segVencido
+                          ? "bg-red-50 text-red-700 border-red-200"
+                          : "bg-amber-50 text-amber-700 border-amber-200"
+                      }`}
+                    >
+                      <Shield className="w-3.5 h-3.5 flex-shrink-0" strokeWidth={2} />
+                      <span>
+                        Seguro{" "}
+                        <strong>{segVencido ? "VENCIDO" : "vence em breve"}</strong>
+                        {" · "}
+                        {formatarData(v.vencimento_seguro!)}
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Ações */}
+                <div className="p-3 border-t border-slate-100 bg-slate-50 flex gap-2">
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    icon={Pencil}
+                    fullWidth
+                    onClick={() => {
+                      setVeiculoEditando(v);
+                      setModalAberto(true);
+                    }}
+                  >
+                    Editar
+                  </Button>
+
+                  <select
+                    value={v.status}
+                    onChange={(e) =>
+                      alterarStatus(v, e.target.value as Veiculo["status"])
+                    }
+                    className="flex-1 border border-slate-300 rounded-xl text-xs font-semibold px-2 py-2 bg-white cursor-pointer hover:bg-slate-100 transition focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="ativo">Ativo</option>
+                    <option value="manutencao">Manutenção</option>
+                    <option value="inativo">Inativo</option>
+                  </select>
+
+                  <Button
+                    variant="danger"
+                    size="sm"
+                    icon={Trash2}
+                    onClick={() => setConfirmarExclusao(v)}
+                    title="Excluir"
+                  />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
 
       {/* Tabela */}
-      {!loading &&
-        visualizacao === "tabela" &&
-        veiculosFiltrados.length > 0 && (
-          <div className="bg-white rounded-2xl border shadow-sm overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="bg-slate-50 border-b">
-                  <tr className="text-left text-xs font-bold text-slate-500 uppercase">
-                    <th className="px-4 py-3">Veículo</th>
-                    <th className="px-4 py-3">Tipo</th>
-                    <th className="px-4 py-3">Ano/Capacidade</th>
-                    <th className="px-4 py-3">Documentos</th>
-                    <th className="px-4 py-3">Status</th>
-                    <th className="px-4 py-3 text-right">Ações</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {veiculosFiltrados.map((v) => {
-                    const cores = coresStatusVeiculo[v.status];
-                    return (
-                      <tr
-                        key={v.id}
-                        className="border-b hover:bg-slate-50 transition"
-                      >
-                        <td className="px-4 py-3">
-                          <div className="flex items-center gap-3">
-                            <div className="text-2xl">
-                              {iconesTipoVeiculo[v.tipo]}
-                            </div>
-                            <div>
-                              <p className="font-mono font-bold text-slate-800">
-                                {v.placa}
-                              </p>
-                              <p className="text-xs text-slate-500">
-                                {v.marca} {v.modelo}
-                              </p>
-                            </div>
+      {!loading && visualizacao === "tabela" && veiculosFiltrados.length > 0 && (
+        <Card className="overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-slate-50 border-b border-slate-100">
+                <tr className="text-left text-xs font-bold text-slate-500 uppercase tracking-wider">
+                  <th className="px-5 py-3">Veículo</th>
+                  <th className="px-5 py-3">Tipo</th>
+                  <th className="px-5 py-3">Ano/Cap.</th>
+                  <th className="px-5 py-3">Documentos</th>
+                  <th className="px-5 py-3">Status</th>
+                  <th className="px-5 py-3 text-right">Ações</th>
+                </tr>
+              </thead>
+              <tbody>
+                {veiculosFiltrados.map((v) => {
+                  const status = STATUS_CONFIG[v.status];
+                  const StatusIcon = status.icon;
+                  return (
+                    <tr
+                      key={v.id}
+                      className="border-b border-slate-100 last:border-b-0 hover:bg-slate-50 transition"
+                    >
+                      <td className="px-5 py-3">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center flex-shrink-0">
+                            <Bus className="w-5 h-5 text-white" strokeWidth={2} />
                           </div>
-                        </td>
-                        <td className="px-4 py-3 text-slate-600">
-                          {rotulosTipoVeiculo[v.tipo]}
-                        </td>
-                        <td className="px-4 py-3 text-slate-600">
-                          <p>{v.ano || "-"}</p>
-                          <p className="text-xs text-slate-400">
-                            {v.capacidade ? `${v.capacidade} pass.` : ""}
-                          </p>
-                        </td>
-                        <td className="px-4 py-3 text-slate-600 text-xs">
-                          <p>
-                            Lic:{" "}
-                            {v.vencimento_licenciamento
-                              ? formatarData(v.vencimento_licenciamento)
-                              : "-"}
-                          </p>
-                          <p>
-                            Seg:{" "}
-                            {v.vencimento_seguro
-                              ? formatarData(v.vencimento_seguro)
-                              : "-"}
-                          </p>
-                        </td>
-                        <td className="px-4 py-3">
-                          <span
-                            className={`text-[10px] font-bold uppercase px-2 py-1 rounded-full ${cores.bg} ${cores.text}`}
+                          <div>
+                            <p className="font-mono font-bold text-slate-800">
+                              {v.placa}
+                            </p>
+                            <p className="text-xs text-slate-500">
+                              {v.marca} {v.modelo}
+                            </p>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-5 py-3 text-slate-600">
+                        {rotulosTipoVeiculo[v.tipo]}
+                      </td>
+                      <td className="px-5 py-3 text-slate-600">
+                        <p>{v.ano || "-"}</p>
+                        <p className="text-xs text-slate-400">
+                          {v.capacidade ? `${v.capacidade} pass.` : ""}
+                        </p>
+                      </td>
+                      <td className="px-5 py-3 text-slate-600 text-xs">
+                        <p className="flex items-center gap-1.5">
+                          <FileText className="w-3 h-3 text-slate-400" strokeWidth={2} />
+                          Lic:{" "}
+                          {v.vencimento_licenciamento
+                            ? formatarData(v.vencimento_licenciamento)
+                            : "-"}
+                        </p>
+                        <p className="flex items-center gap-1.5 mt-0.5">
+                          <Shield className="w-3 h-3 text-slate-400" strokeWidth={2} />
+                          Seg:{" "}
+                          {v.vencimento_seguro
+                            ? formatarData(v.vencimento_seguro)
+                            : "-"}
+                        </p>
+                      </td>
+                      <td className="px-5 py-3">
+                        <Badge color={status.badge} icon={StatusIcon}>
+                          {status.label}
+                        </Badge>
+                      </td>
+                      <td className="px-5 py-3 text-right">
+                        <div className="flex gap-1 justify-end">
+                          <button
+                            onClick={() => {
+                              setVeiculoEditando(v);
+                              setModalAberto(true);
+                            }}
+                            className="p-2 rounded-lg text-slate-600 hover:bg-slate-100 hover:text-blue-600 transition"
+                            title="Editar"
                           >
-                            {rotulosStatusVeiculo[v.status]}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 text-right">
-                          <div className="flex gap-1 justify-end">
-                            <button
-                              onClick={() => {
-                                setVeiculoEditando(v);
-                                setModalAberto(true);
-                              }}
-                              className="p-2 rounded-lg text-slate-600 hover:bg-slate-100 transition"
-                              title="Editar"
-                            >
-                              ✏️
-                            </button>
-                            <button
-                              onClick={() => setConfirmarExclusao(v)}
-                              className="p-2 rounded-lg text-red-600 hover:bg-red-50 transition"
-                              title="Excluir"
-                            >
-                              🗑️
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+                            <Pencil className="w-4 h-4" strokeWidth={2} />
+                          </button>
+                          <button
+                            onClick={() => setConfirmarExclusao(v)}
+                            className="p-2 rounded-lg text-slate-600 hover:bg-red-50 hover:text-red-600 transition"
+                            title="Excluir"
+                          >
+                            <Trash2 className="w-4 h-4" strokeWidth={2} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
-        )}
+        </Card>
+      )}
 
       {/* Modal cadastro/edição */}
       <Modal
@@ -609,8 +592,8 @@ export default function Veiculos() {
       >
         <div className="p-6">
           <div className="text-center mb-5">
-            <div className="w-16 h-16 rounded-full bg-red-100 flex items-center justify-center text-3xl mx-auto mb-3">
-              ⚠️
+            <div className="w-16 h-16 rounded-full bg-red-100 flex items-center justify-center mx-auto mb-3">
+              <AlertTriangle className="w-8 h-8 text-red-600" strokeWidth={2.2} />
             </div>
             <p className="text-slate-700">
               Tem certeza que deseja excluir o veículo{" "}
@@ -624,34 +607,35 @@ export default function Veiculos() {
             </p>
           </div>
           <div className="flex gap-2">
-            <button
+            <Button
+              variant="secondary"
+              size="lg"
+              fullWidth
               onClick={() => setConfirmarExclusao(null)}
-              className="flex-1 border border-slate-300 text-slate-700 py-2.5 rounded-lg font-semibold hover:bg-slate-50 transition active:scale-95"
             >
               Cancelar
-            </button>
-            <button
+            </Button>
+            <Button
+              variant="primary"
+              size="lg"
+              fullWidth
+              icon={Trash2}
               onClick={excluirConfirmado}
-              className="flex-1 bg-red-600 text-white py-2.5 rounded-lg font-semibold hover:bg-red-500 transition active:scale-95"
+              className="!bg-red-600 hover:!bg-red-500 !shadow-red-500/30"
             >
               Sim, excluir
-            </button>
+            </Button>
           </div>
         </div>
       </Modal>
 
       {/* Toast */}
       {mensagem && (
-        <div
-          className={`fixed top-6 right-6 z-[3000] px-6 py-3 rounded-xl shadow-2xl font-semibold text-sm ${
-            mensagem.tipo === "sucesso"
-              ? "bg-green-600 text-white"
-              : "bg-red-600 text-white"
-          }`}
-        >
-          {mensagem.tipo === "sucesso" ? "✅ " : "❌ "}
-          {mensagem.texto}
-        </div>
+        <Toast
+          tipo={mensagem.tipo}
+          texto={mensagem.texto}
+          onFechar={() => setMensagem(null)}
+        />
       )}
     </div>
   );

@@ -1,19 +1,80 @@
 import { useState, useEffect } from "react";
+import {
+  Info,
+  Bus,
+  AlertTriangle,
+  Siren,
+  Megaphone,
+  User,
+  Send,
+  Smartphone,
+} from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { supabase } from "../../supabase";
 import { useAuth } from "../../contexts/AuthContext";
-import { useEnviarNotificacao, type TipoNotificacao } from "../../hooks/useEnviarNotificacao";
+import {
+  useEnviarNotificacao,
+  type TipoNotificacao,
+} from "../../hooks/useEnviarNotificacao";
 import type { Motorista } from "../../types/database";
+
+import { FormField } from "../ui/FormField";
+import { Button } from "../ui/Button";
+import { Badge } from "../ui/Badge";
 
 interface Props {
   onSucesso: (total: number) => void;
   onCancelar: () => void;
 }
 
-const TIPOS: { valor: TipoNotificacao; label: string; cor: string; icone: string }[] = [
-  { valor: "info", label: "Informação", cor: "slate", icone: "ℹ️" },
-  { valor: "rota", label: "Nova Rota", cor: "blue", icone: "🚌" },
-  { valor: "alerta", label: "Alerta", cor: "amber", icone: "⚠️" },
-  { valor: "emergencia", label: "Emergência", cor: "red", icone: "🚨" },
+type TipoOption = {
+  valor: TipoNotificacao;
+  label: string;
+  icon: LucideIcon;
+  colors: { active: string; iconBg: string; iconColor: string };
+};
+
+const TIPOS: TipoOption[] = [
+  {
+    valor: "info",
+    label: "Informação",
+    icon: Info,
+    colors: {
+      active: "bg-slate-50 border-slate-500 text-slate-700",
+      iconBg: "bg-slate-100",
+      iconColor: "text-slate-600",
+    },
+  },
+  {
+    valor: "rota",
+    label: "Nova Rota",
+    icon: Bus,
+    colors: {
+      active: "bg-blue-50 border-blue-500 text-blue-700",
+      iconBg: "bg-blue-100",
+      iconColor: "text-blue-600",
+    },
+  },
+  {
+    valor: "alerta",
+    label: "Alerta",
+    icon: AlertTriangle,
+    colors: {
+      active: "bg-amber-50 border-amber-500 text-amber-700",
+      iconBg: "bg-amber-100",
+      iconColor: "text-amber-600",
+    },
+  },
+  {
+    valor: "emergencia",
+    label: "Emergência",
+    icon: Siren,
+    colors: {
+      active: "bg-red-50 border-red-500 text-red-700",
+      iconBg: "bg-red-100",
+      iconColor: "text-red-600",
+    },
+  },
 ];
 
 export default function FormNovaNotificacao({ onSucesso, onCancelar }: Props) {
@@ -91,40 +152,52 @@ export default function FormNovaNotificacao({ onSucesso, onCancelar }: Props) {
     <div className="p-6 space-y-5">
       {/* Tipo */}
       <div>
-        <label className="block text-xs font-bold text-slate-600 uppercase mb-2">
+        <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-2">
           Tipo
         </label>
         <div className="grid grid-cols-4 gap-2">
-          {TIPOS.map((t) => (
-            <button
-              key={t.valor}
-              type="button"
-              onClick={() => setTipo(t.valor)}
-              className={`p-3 rounded-xl border-2 text-xs font-semibold transition ${
-                tipo === t.valor
-                  ? `bg-${t.cor}-50 border-${t.cor}-500 text-${t.cor}-700`
-                  : "border-slate-200 text-slate-600 hover:bg-slate-50"
-              }`}
-            >
-              <div className="text-xl mb-1">{t.icone}</div>
-              {t.label}
-            </button>
-          ))}
+          {TIPOS.map((t) => {
+            const Icon = t.icon;
+            const isActive = tipo === t.valor;
+            return (
+              <button
+                key={t.valor}
+                type="button"
+                onClick={() => setTipo(t.valor)}
+                className={`p-3 rounded-xl border-2 text-xs font-semibold transition active:scale-95 flex flex-col items-center gap-1.5 ${
+                  isActive
+                    ? t.colors.active
+                    : "border-slate-200 text-slate-600 hover:bg-slate-50"
+                }`}
+              >
+                <div
+                  className={`w-8 h-8 rounded-lg flex items-center justify-center ${
+                    isActive ? t.colors.iconBg : "bg-slate-100"
+                  }`}
+                >
+                  <Icon
+                    className={`w-4 h-4 ${
+                      isActive ? t.colors.iconColor : "text-slate-500"
+                    }`}
+                    strokeWidth={2.2}
+                  />
+                </div>
+                {t.label}
+              </button>
+            );
+          })}
         </div>
       </div>
 
       {/* Título */}
       <div>
-        <label className="block text-xs font-bold text-slate-600 uppercase mb-2">
-          Título <span className="text-red-500">*</span>
-        </label>
-        <input
-          type="text"
+        <FormField
+          label="Título"
+          required
           value={titulo}
           onChange={(e) => setTitulo(e.target.value)}
           maxLength={80}
           placeholder="Ex: Nova rota disponível"
-          className="w-full border border-slate-300 px-4 py-2.5 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
         />
         <p className="text-[10px] text-slate-400 mt-1 text-right">
           {titulo.length}/80
@@ -133,16 +206,15 @@ export default function FormNovaNotificacao({ onSucesso, onCancelar }: Props) {
 
       {/* Mensagem */}
       <div>
-        <label className="block text-xs font-bold text-slate-600 uppercase mb-2">
-          Mensagem <span className="text-red-500">*</span>
-        </label>
-        <textarea
+        <FormField
+          as="textarea"
+          label="Mensagem"
+          required
           value={mensagem}
           onChange={(e) => setMensagem(e.target.value)}
           maxLength={200}
           rows={3}
           placeholder="Descreva a notificação..."
-          className="w-full border border-slate-300 px-4 py-2.5 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
         />
         <p className="text-[10px] text-slate-400 mt-1 text-right">
           {mensagem.length}/200
@@ -151,7 +223,7 @@ export default function FormNovaNotificacao({ onSucesso, onCancelar }: Props) {
 
       {/* Destinatários */}
       <div>
-        <label className="block text-xs font-bold text-slate-600 uppercase mb-2">
+        <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-2">
           Destinatários
         </label>
 
@@ -159,33 +231,35 @@ export default function FormNovaNotificacao({ onSucesso, onCancelar }: Props) {
           <button
             type="button"
             onClick={() => setModoEnvio("todos")}
-            className={`flex-1 py-2.5 rounded-xl text-sm font-semibold border-2 transition ${
+            className={`flex-1 py-2.5 rounded-xl text-sm font-semibold border-2 transition active:scale-95 flex items-center justify-center gap-2 ${
               modoEnvio === "todos"
                 ? "bg-blue-50 border-blue-500 text-blue-700"
                 : "border-slate-200 text-slate-600 hover:bg-slate-50"
             }`}
           >
-            📣 Todos ({motoristas.length})
+            <Megaphone className="w-4 h-4" strokeWidth={2.2} />
+            Todos ({motoristas.length})
           </button>
           <button
             type="button"
             onClick={() => setModoEnvio("selecionados")}
-            className={`flex-1 py-2.5 rounded-xl text-sm font-semibold border-2 transition ${
+            className={`flex-1 py-2.5 rounded-xl text-sm font-semibold border-2 transition active:scale-95 flex items-center justify-center gap-2 ${
               modoEnvio === "selecionados"
                 ? "bg-blue-50 border-blue-500 text-blue-700"
                 : "border-slate-200 text-slate-600 hover:bg-slate-50"
             }`}
           >
-            👤 Selecionados ({selecionados.size})
+            <User className="w-4 h-4" strokeWidth={2.2} />
+            Selecionados ({selecionados.size})
           </button>
         </div>
 
         {modoEnvio === "selecionados" && (
-          <div className="border border-slate-200 rounded-xl max-h-64 overflow-y-auto">
+          <div className="border border-slate-200 rounded-xl max-h-64 overflow-y-auto bg-slate-50/30">
             <button
               type="button"
               onClick={selecionarTodos}
-              className="w-full px-4 py-2 text-xs font-semibold text-blue-600 hover:bg-blue-50 border-b transition text-left"
+              className="w-full px-4 py-2.5 text-xs font-semibold text-blue-600 hover:bg-blue-50 border-b border-slate-200 transition text-left"
             >
               {selecionados.size === motoristas.length
                 ? "Desmarcar todos"
@@ -194,26 +268,26 @@ export default function FormNovaNotificacao({ onSucesso, onCancelar }: Props) {
             {motoristas.map((m) => (
               <label
                 key={m.id}
-                className="flex items-center gap-3 px-4 py-2.5 hover:bg-slate-50 cursor-pointer border-b last:border-b-0"
+                className="flex items-center gap-3 px-4 py-2.5 hover:bg-white cursor-pointer border-b border-slate-100 last:border-b-0 transition"
               >
                 <input
                   type="checkbox"
                   checked={selecionados.has(m.id)}
                   onChange={() => toggleMotorista(m.id)}
-                  className="w-4 h-4 rounded text-blue-600"
+                  className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500"
                 />
-                <div className="flex-1">
-                  <p className="text-sm font-semibold text-slate-800">
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-slate-800 truncate">
                     {m.nome}
                   </p>
-                  <p className="text-xs text-slate-500">
+                  <p className="text-xs text-slate-500 truncate">
                     {m.email || m.telefone}
                   </p>
                 </div>
                 {m.auth_user_id && (
-                  <span className="text-[9px] font-bold uppercase px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700">
+                  <Badge color="indigo" icon={Smartphone}>
                     App
-                  </span>
+                  </Badge>
                 )}
               </label>
             ))}
@@ -223,36 +297,35 @@ export default function FormNovaNotificacao({ onSucesso, onCancelar }: Props) {
 
       {/* Erro */}
       {erro && (
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-2.5 rounded-xl text-sm">
+        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-2.5 rounded-xl text-sm flex items-center gap-2">
+          <AlertTriangle className="w-4 h-4 flex-shrink-0" strokeWidth={2.2} />
           {erro}
         </div>
       )}
 
       {/* Ações */}
-      <div className="flex gap-2 pt-2">
-        <button
+      <div className="flex gap-2 pt-2 border-t border-slate-100">
+        <Button
           type="button"
+          variant="secondary"
+          size="lg"
+          fullWidth
           onClick={onCancelar}
           disabled={enviando}
-          className="flex-1 border border-slate-300 text-slate-700 py-2.5 rounded-xl font-semibold hover:bg-slate-50 transition active:scale-95 disabled:opacity-50"
         >
           Cancelar
-        </button>
-        <button
+        </Button>
+        <Button
           type="button"
+          variant="primary"
+          size="lg"
+          fullWidth
+          icon={Send}
+          loading={enviando}
           onClick={handleEnviar}
-          disabled={enviando}
-          className="flex-1 bg-blue-600 text-white py-2.5 rounded-xl font-semibold hover:bg-blue-500 transition active:scale-95 shadow-lg shadow-blue-500/30 disabled:opacity-50 flex items-center justify-center gap-2"
         >
-          {enviando ? (
-            <>
-              <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-              Enviando...
-            </>
-          ) : (
-            <>📤 Enviar Notificação</>
-          )}
-        </button>
+          {enviando ? "Enviando..." : "Enviar Notificação"}
+        </Button>
       </div>
     </div>
   );

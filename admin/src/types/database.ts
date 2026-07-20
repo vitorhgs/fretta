@@ -1,3 +1,43 @@
+export interface Linha {
+  id: string;
+  empresa_id: string;
+  
+  nome: string;
+  codigo?: string | null;
+  
+  cliente_razao_social?: string | null;
+  cliente_nome_fantasia?: string | null;
+  cliente_cnpj?: string | null;
+  
+  endereco_destino?: string | null;
+  cidade_destino?: string | null;
+  estado_destino?: string | null;
+  
+  contato_nome?: string | null;
+  contato_telefone?: string | null;
+  contato_email?: string | null;
+  
+  valor_mensal?: number | null;
+  valor_km?: number | null;
+  data_inicio_contrato?: string | null;
+  data_fim_contrato?: string | null;
+  
+  cor: string;
+  categoria?: 'empresa' | 'escola' | 'evento' | 'outros' | null;
+  observacoes?: string | null;
+  
+  status: 'ativa' | 'pausada' | 'encerrada';
+  
+  created_at: string;
+  updated_at: string;
+  
+  // Relacionamentos calculados
+  total_rotas?: number;
+  total_motoristas?: number;
+  total_veiculos?: number;
+}
+
+
 export interface Empresa {
   id: string;
   nome: string;

@@ -9,6 +9,16 @@ import {
 } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
+import {
+  Radio,
+  RefreshCw,
+  WifiOff,
+  PanelLeftClose,
+  PanelLeftOpen,
+  X,
+  MapPin,
+  Gauge,
+} from "lucide-react";
 import { supabase } from "../supabase";
 import {
   useMotoristasAoVivo,
@@ -33,9 +43,22 @@ const cssAnimacao = `
   .leaflet-popup-content {
     margin: 8px 12px !important;
   }
+  @keyframes fadeInAoVivo {
+    from { opacity: 0; transform: scale(0.95); }
+    to { opacity: 1; transform: scale(1); }
+  }
+  .fade-in { animation: fadeInAoVivo 0.2s ease-out; }
+  @keyframes pulseAoVivo {
+    0%,100% { opacity: 1; }
+    50% { opacity: 0.5; }
+  }
+  .skeleton { animation: pulseAoVivo 1.5s ease-in-out infinite; }
+  .btn-press:active { transform: scale(0.96); }
 `;
 
-/* Componente que segue um motorista quando selecionado */
+/* =========================
+   HELPERS DE MAPA
+========================= */
 function SeguirMotorista({
   motorista,
 }: {
@@ -52,7 +75,6 @@ function SeguirMotorista({
   return null;
 }
 
-/* Ajusta bounds inicial */
 function AjustarBounds({ motoristas }: { motoristas: MotoristaAoVivo[] }) {
   const map = useMap();
   const [aplicado, setAplicado] = useState(false);
@@ -74,7 +96,9 @@ function AjustarBounds({ motoristas }: { motoristas: MotoristaAoVivo[] }) {
   return null;
 }
 
-/* ✨ Marcador otimizado — só re-renderiza se posição ou heading mudar */
+/* =========================
+   MARCADOR OTIMIZADO
+========================= */
 function MarcadorMotoristaOtimizado({
   motorista,
   onSelect,
@@ -82,7 +106,6 @@ function MarcadorMotoristaOtimizado({
   motorista: MotoristaAoVivo;
   onSelect: () => void;
 }) {
-  // Só recria o ícone se dados visuais mudaram
   const icone = useMemo(
     () =>
       criarMarcadorMotorista({
@@ -109,27 +132,31 @@ function MarcadorMotoristaOtimizado({
     >
       <Popup autoClose={false} closeOnClick={false}>
         <div className="text-xs min-w-[180px]">
-          <p className="font-bold text-sm mb-1 text-slate-800">
+          <p className="font-bold text-sm mb-1.5 text-slate-800">
             {motorista.motorista_nome}
           </p>
           {motorista.em_viagem && motorista.rota_nome && (
             <>
-              <div className="flex items-center gap-1.5 mb-1">
+              <div className="flex items-center gap-1.5 mb-1.5">
                 <div
                   className="w-2 h-2 rounded-full"
-                  style={{ backgroundColor: motorista.rota_cor || "#3B82F6" }}
+                  style={{
+                    backgroundColor: motorista.rota_cor || "#3B82F6",
+                  }}
                 />
                 <p className="text-slate-700 font-semibold">
                   {motorista.rota_nome}
                 </p>
               </div>
-              <p className="text-slate-600">
+              <div className="flex items-center gap-1 text-slate-600 mb-0.5">
+                <MapPin className="w-3 h-3" strokeWidth={2.2} />
                 <strong>{motorista.paradas_concluidas}</strong>/
                 {motorista.paradas_totais} paradas
-              </p>
-              <p className="text-slate-600">
+              </div>
+              <div className="flex items-center gap-1 text-slate-600">
+                <Gauge className="w-3 h-3" strokeWidth={2.2} />
                 <strong>{Math.round(motorista.velocidade_kmh)}</strong> km/h
-              </p>
+              </div>
             </>
           )}
           {!motorista.em_viagem && (
@@ -141,30 +168,33 @@ function MarcadorMotoristaOtimizado({
   );
 }
 
+/* =========================
+   COMPONENTE PRINCIPAL
+========================= */
+type Filtro = "todos" | "em_viagem" | "online" | "offline";
+
 export default function AoVivo() {
   const { motoristas, loading, stats, recarregar } = useMotoristasAoVivo();
   const [motoristaSelecionadoId, setMotoristaSelecionadoId] = useState<
     string | null
   >(null);
-  const [filtro, setFiltro] = useState<
-    "todos" | "em_viagem" | "online" | "offline"
-  >("todos");
+  const [filtro, setFiltro] = useState<Filtro>("todos");
   const [busca, setBusca] = useState("");
+  const [painelAberto, setPainelAberto] = useState(true);
   const [rotasVisualizadas, setRotasVisualizadas] = useState<
     Record<string, any[]>
   >({});
 
-  // ✨ Motorista selecionado sempre pega a versão mais recente
   const motoristaSelecionado = useMemo(
     () =>
       motoristaSelecionadoId
-        ? motoristas.find((m) => m.motorista_id === motoristaSelecionadoId) ||
-          null
+        ? motoristas.find(
+            (m) => m.motorista_id === motoristaSelecionadoId
+          ) || null
         : null,
     [motoristas, motoristaSelecionadoId]
   );
 
-  // Filtra motoristas
   const motoristasFiltrados = useMemo(() => {
     let lista = motoristas;
 
@@ -186,7 +216,6 @@ export default function AoVivo() {
     return lista;
   }, [motoristas, filtro, busca]);
 
-  // Carrega os pontos das rotas em viagem
   useEffect(() => {
     const rotaIds = motoristas
       .filter((m) => m.em_viagem && m.rota_id)
@@ -195,7 +224,6 @@ export default function AoVivo() {
 
     if (rotaIds.length === 0) return;
 
-    // Só busca as rotas que ainda não temos
     const faltantes = rotaIds.filter((id) => !rotasVisualizadas[id]);
     if (faltantes.length === 0) return;
 
@@ -234,7 +262,6 @@ export default function AoVivo() {
       .filter((p): p is [number, number] => p !== null);
   }, []);
 
-  // Só motoristas online — evita re-render dos marcadores
   const motoristasOnline = useMemo(
     () => motoristas.filter((m) => m.realmente_online),
     [motoristas]
@@ -248,138 +275,213 @@ export default function AoVivo() {
     [motoristas, rotasVisualizadas]
   );
 
+  const PAINEL_WIDTH = 380;
+  const MARGIN = 16;
+
   return (
     <>
       <style>{cssAnimacao}</style>
 
       <div
-        className="flex gap-4 w-full"
-        style={{ height: "calc(100vh - 120px)", padding: "16px" }}
+        className="relative w-full flex gap-4"
+        style={{ height: "calc(100vh - 120px)", padding: `${MARGIN}px` }}
       >
-        {/* SIDEBAR */}
-        <div className="w-[380px] flex-shrink-0 bg-white rounded-2xl shadow-xl border border-slate-200 flex flex-col overflow-hidden">
-          {/* Header */}
-          <div className="px-5 py-4 border-b bg-gradient-to-br from-slate-50 to-blue-50/50">
-            <div className="flex items-center justify-between mb-1">
-              <h2 className="text-lg font-bold text-slate-800">Ao Vivo</h2>
+        {/* ===== SIDEBAR DARK ===== */}
+        <div
+          style={{
+            width: painelAberto ? `${PAINEL_WIDTH}px` : "56px",
+            minWidth: painelAberto ? `${PAINEL_WIDTH}px` : "56px",
+            transition: "width 0.35s cubic-bezier(0.4,0,0.2,1)",
+          }}
+          className="relative bg-[#09152E] rounded-2xl shadow-2xl border border-slate-800 flex flex-col overflow-hidden"
+        >
+          {/* HEADER */}
+          <div className="flex items-center justify-between px-4 py-4 border-b border-slate-800 flex-shrink-0">
+            {painelAberto ? (
+              <>
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="w-10 h-10 rounded-xl bg-blue-500/20 flex items-center justify-center flex-shrink-0">
+                    <Radio
+                      className="w-5 h-5 text-blue-400"
+                      strokeWidth={2.2}
+                    />
+                  </div>
+                  <div className="min-w-0">
+                    <h2 className="text-base font-bold text-white leading-tight">
+                      Ao Vivo
+                    </h2>
+                    <div className="flex items-center gap-1.5 mt-0.5">
+                      <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+                      <p className="text-[11px] text-slate-400 font-semibold">
+                        Tempo real
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-1 flex-shrink-0">
+                  <button
+                    onClick={recarregar}
+                    className="btn-press w-8 h-8 flex items-center justify-center rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition"
+                    title="Atualizar"
+                  >
+                    <RefreshCw className="w-4 h-4" strokeWidth={2.2} />
+                  </button>
+                  <button
+                    onClick={() => setPainelAberto(false)}
+                    className="btn-press w-8 h-8 flex items-center justify-center rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition"
+                    title="Fechar painel"
+                  >
+                    <PanelLeftClose className="w-4 h-4" strokeWidth={2.2} />
+                  </button>
+                </div>
+              </>
+            ) : (
               <button
-                onClick={recarregar}
-                className="text-xs text-slate-500 hover:text-slate-800 font-semibold"
-                title="Recarregar"
+                onClick={() => setPainelAberto(true)}
+                className="btn-press w-8 h-8 flex items-center justify-center rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white mx-auto"
+                title="Abrir painel"
               >
-                ↻ atualizar
+                <PanelLeftOpen className="w-4 h-4" strokeWidth={2.2} />
               </button>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-              <p className="text-[11px] text-slate-500 font-semibold">
-                Atualizando em tempo real
-              </p>
-            </div>
-          </div>
-
-          {/* Stats */}
-          <div className="px-5 py-3 border-b grid grid-cols-3 gap-2">
-            <div className="text-center">
-              <p className="text-2xl font-black text-green-600 leading-none">
-                {stats.emViagem}
-              </p>
-              <p className="text-[10px] text-slate-500 uppercase font-bold mt-1">
-                Em viagem
-              </p>
-            </div>
-            <div className="text-center border-x border-slate-200">
-              <p className="text-2xl font-black text-blue-600 leading-none">
-                {stats.online}
-              </p>
-              <p className="text-[10px] text-slate-500 uppercase font-bold mt-1">
-                Online
-              </p>
-            </div>
-            <div className="text-center">
-              <p className="text-2xl font-black text-slate-400 leading-none">
-                {stats.offline}
-              </p>
-              <p className="text-[10px] text-slate-500 uppercase font-bold mt-1">
-                Offline
-              </p>
-            </div>
-          </div>
-
-          {/* Filtros */}
-          <div className="px-5 py-3 border-b space-y-2">
-            <input
-              type="text"
-              placeholder="Buscar motorista..."
-              value={busca}
-              onChange={(e) => setBusca(e.target.value)}
-              className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-            <div className="flex gap-1 bg-slate-100 rounded-lg p-1">
-              {[
-                { v: "todos" as const, l: "Todos" },
-                { v: "em_viagem" as const, l: "Viagem" },
-                { v: "online" as const, l: "Online" },
-                { v: "offline" as const, l: "Offline" },
-              ].map((f) => (
-                <button
-                  key={f.v}
-                  onClick={() => setFiltro(f.v)}
-                  className={`flex-1 py-1.5 rounded-md text-[11px] font-bold transition ${
-                    filtro === f.v
-                      ? "bg-white text-slate-800 shadow-sm"
-                      : "text-slate-500 hover:text-slate-700"
-                  }`}
-                >
-                  {f.l}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Lista */}
-          <div className="flex-1 overflow-y-auto p-3 space-y-2">
-            {loading && (
-              <div className="text-center py-10">
-                <div className="inline-block w-8 h-8 border-3 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
-                <p className="text-xs text-slate-500 mt-2">Carregando...</p>
-              </div>
             )}
-
-            {!loading && motoristasFiltrados.length === 0 && (
-              <div className="text-center py-10 px-4">
-                <div className="text-4xl mb-2">📡</div>
-                <p className="text-sm font-bold text-slate-700">
-                  {motoristas.length === 0
-                    ? "Ninguém online"
-                    : "Nenhum motorista encontrado"}
-                </p>
-                <p className="text-xs text-slate-500 mt-1">
-                  {motoristas.length === 0
-                    ? "Quando um motorista fizer login, ele aparece aqui"
-                    : "Ajuste os filtros pra ver mais"}
-                </p>
-              </div>
-            )}
-
-            {motoristasFiltrados.map((m) => (
-              <CardMotoristaAoVivo
-                key={m.motorista_id}
-                motorista={m}
-                selecionado={motoristaSelecionadoId === m.motorista_id}
-                onClick={() =>
-                  setMotoristaSelecionadoId(
-                    motoristaSelecionadoId === m.motorista_id
-                      ? null
-                      : m.motorista_id
-                  )
-                }
-              />
-            ))}
           </div>
+
+          {painelAberto && (
+            <div className="flex-1 overflow-y-auto">
+              {/* STATS */}
+              <div className="px-4 py-4 border-b border-slate-800">
+                <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-3">
+                  Resumo
+                </p>
+                <div className="grid grid-cols-3 gap-2">
+                  <StatMini
+                    value={stats.emViagem}
+                    label="Em viagem"
+                    color="text-green-400"
+                  />
+                  <div className="border-x border-slate-800">
+                    <StatMini
+                      value={stats.online}
+                      label="Online"
+                      color="text-blue-400"
+                    />
+                  </div>
+                  <StatMini
+                    value={stats.offline}
+                    label="Offline"
+                    color="text-slate-500"
+                  />
+                </div>
+              </div>
+
+              {/* FILTROS */}
+              <div className="px-4 py-4 border-b border-slate-800 space-y-3">
+                <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+                  Filtrar
+                </p>
+
+                {/* Busca dark */}
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={busca}
+                    onChange={(e) => setBusca(e.target.value)}
+                    placeholder="Buscar motorista..."
+                    className="border border-slate-700 bg-slate-800 text-white placeholder-slate-500 px-3 py-2 rounded-lg w-full text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                  {busca && (
+                    <button
+                      onClick={() => setBusca("")}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white p-1"
+                      title="Limpar busca"
+                    >
+                      <X className="w-3.5 h-3.5" strokeWidth={2.2} />
+                    </button>
+                  )}
+                </div>
+
+                {/* Tabs dark */}
+                <div className="flex gap-1">
+                  {[
+                    { v: "todos" as Filtro, l: "Todos" },
+                    { v: "em_viagem" as Filtro, l: "Viagem" },
+                    { v: "online" as Filtro, l: "Online" },
+                    { v: "offline" as Filtro, l: "Offline" },
+                  ].map((f) => (
+                    <button
+                      key={f.v}
+                      onClick={() => setFiltro(f.v)}
+                      className={`btn-press flex-1 py-1.5 rounded-md text-[10px] font-bold transition ${
+                        filtro === f.v
+                          ? "bg-blue-600 text-white"
+                          : "bg-slate-800 text-slate-400 hover:bg-slate-700"
+                      }`}
+                    >
+                      {f.l}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* LISTA */}
+              <div className="px-4 py-4 space-y-2">
+                <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-2">
+                  Motoristas ({motoristasFiltrados.length})
+                </p>
+
+                {loading && (
+                  <div className="space-y-2">
+                    {[1, 2, 3].map((i) => (
+                      <div
+                        key={i}
+                        className="skeleton h-20 bg-slate-800/60 rounded-lg"
+                      />
+                    ))}
+                  </div>
+                )}
+
+                {!loading && motoristasFiltrados.length === 0 && (
+                  <div className="fade-in text-center py-10 px-4">
+                    <div className="w-14 h-14 rounded-full bg-slate-800 flex items-center justify-center mx-auto mb-3">
+                      <WifiOff
+                        className="w-7 h-7 text-slate-500"
+                        strokeWidth={1.8}
+                      />
+                    </div>
+                    <p className="text-sm font-bold text-white mb-1">
+                      {motoristas.length === 0
+                        ? "Ninguém online"
+                        : "Nenhum motorista encontrado"}
+                    </p>
+                    <p className="text-xs text-slate-500">
+                      {motoristas.length === 0
+                        ? "Quando um motorista fizer login, aparecerá aqui."
+                        : "Ajuste os filtros para ver mais."}
+                    </p>
+                  </div>
+                )}
+
+                {motoristasFiltrados.map((m) => (
+                  <CardMotoristaAoVivo
+                    key={m.motorista_id}
+                    motorista={m}
+                    selecionado={motoristaSelecionadoId === m.motorista_id}
+                    onClick={() =>
+                      setMotoristaSelecionadoId(
+                        motoristaSelecionadoId === m.motorista_id
+                          ? null
+                          : m.motorista_id
+                      )
+                    }
+                  />
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
-        {/* MAPA */}
+        {/* ===== MAPA ===== */}
         <div className="flex-1 relative rounded-2xl overflow-hidden shadow-xl border border-slate-200">
           <MapContainer
             center={[-23.55, -46.63]}
@@ -413,7 +515,7 @@ export default function AoVivo() {
               );
             })}
 
-            {/* Marcadores dos motoristas */}
+            {/* Marcadores */}
             {motoristasOnline.map((m) => (
               <MarcadorMotoristaOtimizado
                 key={m.motorista_id}
@@ -424,27 +526,64 @@ export default function AoVivo() {
           </MapContainer>
 
           {/* Legenda flutuante */}
-          <div className="absolute bottom-4 left-4 bg-white/95 backdrop-blur-md rounded-xl shadow-lg border border-slate-200 p-3 text-xs z-[400]">
-            <p className="font-bold text-slate-700 mb-2 text-[10px] uppercase tracking-wider">
+          <div className="fade-in absolute bottom-4 left-4 bg-[#09152E]/95 backdrop-blur-md rounded-xl shadow-2xl border border-slate-800 p-3 text-xs z-[400]">
+            <p className="font-bold text-slate-300 mb-2 text-[10px] uppercase tracking-wider flex items-center gap-1.5">
+              <Radio className="w-3 h-3 text-blue-400" strokeWidth={2.2} />
               Legenda
             </p>
             <div className="space-y-1.5">
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded-full bg-green-500 animate-pulse" />
-                <span className="text-slate-600">Em viagem</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded-full bg-slate-400" />
-                <span className="text-slate-600">Online / Parado</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded-full bg-slate-300" />
-                <span className="text-slate-600">Offline</span>
-              </div>
+              <LegendaItem
+                dot="bg-green-500"
+                label="Em viagem"
+                pulse
+              />
+              <LegendaItem dot="bg-slate-400" label="Online / Parado" />
+              <LegendaItem dot="bg-slate-600" label="Offline" />
             </div>
           </div>
         </div>
       </div>
     </>
+  );
+}
+
+/* =========================
+   SUB-COMPONENTES
+========================= */
+function StatMini({
+  value,
+  label,
+  color,
+}: {
+  value: number;
+  label: string;
+  color: string;
+}) {
+  return (
+    <div className="text-center">
+      <p className={`text-2xl font-black leading-none ${color}`}>{value}</p>
+      <p className="text-[10px] text-slate-500 uppercase font-bold mt-1.5">
+        {label}
+      </p>
+    </div>
+  );
+}
+
+function LegendaItem({
+  dot,
+  label,
+  pulse,
+}: {
+  dot: string;
+  label: string;
+  pulse?: boolean;
+}) {
+  return (
+    <div className="flex items-center gap-2">
+      <div
+        className={`w-3 h-3 rounded-full ${dot} ${pulse ? "animate-pulse" : ""}`}
+      />
+      <span className="text-slate-300">{label}</span>
+    </div>
   );
 }

@@ -14,20 +14,27 @@ export default function BadgeTurnos({
   if (!turnos || turnos.length === 0) return null;
 
   const ehSm = size === "sm";
+  const iconSize = ehSm ? "w-3 h-3" : "w-3.5 h-3.5";
 
   // Compact: mostra só os ícones
   if (compact) {
     return (
-      <div className="inline-flex items-center gap-0.5">
-        {turnos.map((t) => (
-          <span
-            key={t}
-            title={t}
-            className={ehSm ? "text-xs" : "text-sm"}
-          >
-            {iconeTurno(t)}
-          </span>
-        ))}
+      <div className="inline-flex items-center gap-1">
+        {turnos.map((t) => {
+          const Icon = iconeTurno(t);
+          const c = corTurno(t);
+          return (
+            <span
+              key={t}
+              title={t}
+              className={`inline-flex items-center justify-center rounded ${c.bg} ${c.text} ${
+                ehSm ? "w-4 h-4" : "w-5 h-5"
+              }`}
+            >
+              <Icon className={iconSize} strokeWidth={2.2} />
+            </span>
+          );
+        })}
       </div>
     );
   }
@@ -35,6 +42,7 @@ export default function BadgeTurnos({
   return (
     <div className="inline-flex flex-wrap items-center gap-1">
       {turnos.map((t) => {
+        const Icon = iconeTurno(t);
         const c = corTurno(t);
         return (
           <span
@@ -45,7 +53,7 @@ export default function BadgeTurnos({
               ${ehSm ? "px-1.5 py-0.5 text-[10px]" : "px-2 py-1 text-xs"}
             `}
           >
-            <span>{iconeTurno(t)}</span>
+            <Icon className={iconSize} strokeWidth={2.2} />
             <span>{t}</span>
           </span>
         );

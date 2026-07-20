@@ -1,10 +1,22 @@
 import { useState, useEffect } from "react";
+import {
+  IdCard,
+  Bus,
+  FileText,
+  Activity,
+  CheckCircle2,
+  Wrench,
+  Moon,
+} from "lucide-react";
 import type { Veiculo } from "../../types/database";
 import {
   formatarPlaca,
   validarPlaca,
   rotulosTipoVeiculo,
 } from "../../lib/formatters";
+import { FormField } from "../ui/FormField";
+import { FormSection } from "../ui/FormSection";
+import { Button } from "../ui/Button";
 
 interface FormVeiculoProps {
   veiculo?: Veiculo | null;
@@ -14,6 +26,41 @@ interface FormVeiculoProps {
 }
 
 const anoAtual = new Date().getFullYear();
+
+const STATUS_OPTIONS: {
+  value: Veiculo["status"];
+  label: string;
+  icon: typeof CheckCircle2;
+  colors: { active: string; inactive: string };
+}[] = [
+  {
+    value: "ativo",
+    label: "Ativo",
+    icon: CheckCircle2,
+    colors: {
+      active: "bg-green-50 border-green-500 text-green-700",
+      inactive: "bg-white border-slate-200 text-slate-500 hover:border-slate-300",
+    },
+  },
+  {
+    value: "manutencao",
+    label: "Manutenção",
+    icon: Wrench,
+    colors: {
+      active: "bg-amber-50 border-amber-500 text-amber-700",
+      inactive: "bg-white border-slate-200 text-slate-500 hover:border-slate-300",
+    },
+  },
+  {
+    value: "inativo",
+    label: "Inativo",
+    icon: Moon,
+    colors: {
+      active: "bg-slate-100 border-slate-400 text-slate-700",
+      inactive: "bg-white border-slate-200 text-slate-500 hover:border-slate-300",
+    },
+  },
+];
 
 export default function FormVeiculo({
   veiculo,
@@ -86,321 +133,206 @@ export default function FormVeiculo({
   };
 
   return (
-    <form onSubmit={handleSubmit} className="p-6 space-y-5">
+    <form onSubmit={handleSubmit} className="p-6 space-y-6">
       {/* Identificação */}
-      <div>
-        <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">
-          🪪 Identificação
-        </h3>
+      <FormSection title="Identificação" icon={IdCard}>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          <div>
-            <label className="text-xs font-semibold text-slate-600">
-              Placa *
-            </label>
-            <input
-              type="text"
-              value={form.placa}
-              onChange={(e) =>
-                setForm({ ...form, placa: formatarPlaca(e.target.value) })
-              }
-              className={`mt-1 border px-3 py-2.5 rounded-lg w-full text-sm font-mono uppercase tracking-wider focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                erros.placa ? "border-red-400" : "border-slate-300"
-              }`}
-              placeholder="ABC-1234"
-              autoFocus
-            />
-            {erros.placa && (
-              <p className="text-xs text-red-500 mt-1">{erros.placa}</p>
-            )}
-          </div>
-
-          <div>
-            <label className="text-xs font-semibold text-slate-600">
-              Marca
-            </label>
-            <input
-              type="text"
-              value={form.marca}
-              onChange={(e) => setForm({ ...form, marca: e.target.value })}
-              className="mt-1 border border-slate-300 px-3 py-2.5 rounded-lg w-full text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="Mercedes-Benz"
-            />
-          </div>
-
-          <div>
-            <label className="text-xs font-semibold text-slate-600">
-              Modelo *
-            </label>
-            <input
-              type="text"
-              value={form.modelo}
-              onChange={(e) => setForm({ ...form, modelo: e.target.value })}
-              className={`mt-1 border px-3 py-2.5 rounded-lg w-full text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                erros.modelo ? "border-red-400" : "border-slate-300"
-              }`}
-              placeholder="Sprinter 415"
-            />
-            {erros.modelo && (
-              <p className="text-xs text-red-500 mt-1">{erros.modelo}</p>
-            )}
-          </div>
-
-          <div>
-            <label className="text-xs font-semibold text-slate-600">
-              Ano *
-            </label>
-            <input
-              type="number"
-              value={form.ano}
-              onChange={(e) =>
-                setForm({ ...form, ano: parseInt(e.target.value) || 0 })
-              }
-              min={1900}
-              max={anoAtual + 1}
-              className={`mt-1 border px-3 py-2.5 rounded-lg w-full text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                erros.ano ? "border-red-400" : "border-slate-300"
-              }`}
-              placeholder="2024"
-            />
-            {erros.ano && (
-              <p className="text-xs text-red-500 mt-1">{erros.ano}</p>
-            )}
-          </div>
-
-          <div>
-            <label className="text-xs font-semibold text-slate-600">Cor</label>
-            <input
-              type="text"
-              value={form.cor}
-              onChange={(e) => setForm({ ...form, cor: e.target.value })}
-              className="mt-1 border border-slate-300 px-3 py-2.5 rounded-lg w-full text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="Branco"
-            />
-          </div>
-
-          <div>
-            <label className="text-xs font-semibold text-slate-600">
-              KM atual
-            </label>
-            <input
-              type="number"
-              value={form.km_atual}
-              onChange={(e) =>
-                setForm({ ...form, km_atual: parseInt(e.target.value) || 0 })
-              }
-              min={0}
-              className="mt-1 border border-slate-300 px-3 py-2.5 rounded-lg w-full text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="0"
-            />
-          </div>
+          <FormField
+            label="Placa"
+            required
+            value={form.placa}
+            onChange={(e) => setForm({ ...form, placa: formatarPlaca(e.target.value) })}
+            placeholder="ABC-1234"
+            className="font-mono uppercase tracking-wider"
+            error={erros.placa}
+            autoFocus
+          />
+          <FormField
+            label="Marca"
+            value={form.marca}
+            onChange={(e) => setForm({ ...form, marca: e.target.value })}
+            placeholder="Mercedes-Benz"
+          />
+          <FormField
+            label="Modelo"
+            required
+            value={form.modelo}
+            onChange={(e) => setForm({ ...form, modelo: e.target.value })}
+            placeholder="Sprinter 415"
+            error={erros.modelo}
+          />
+          <FormField
+            label="Ano"
+            required
+            type="number"
+            value={form.ano}
+            onChange={(e) => setForm({ ...form, ano: parseInt(e.target.value) || 0 })}
+            min={1900}
+            max={anoAtual + 1}
+            placeholder="2024"
+            error={erros.ano}
+          />
+          <FormField
+            label="Cor"
+            value={form.cor}
+            onChange={(e) => setForm({ ...form, cor: e.target.value })}
+            placeholder="Branco"
+          />
+          <FormField
+            label="KM atual"
+            type="number"
+            value={form.km_atual}
+            onChange={(e) => setForm({ ...form, km_atual: parseInt(e.target.value) || 0 })}
+            min={0}
+            placeholder="0"
+          />
         </div>
-      </div>
+      </FormSection>
 
       {/* Características */}
-      <div>
-        <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">
-          🚌 Características
-        </h3>
+      <FormSection title="Características" icon={Bus}>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          <div>
-            <label className="text-xs font-semibold text-slate-600">
-              Tipo *
-            </label>
-            <select
-              value={form.tipo}
-              onChange={(e) =>
-                setForm({ ...form, tipo: e.target.value as Veiculo["tipo"] })
-              }
-              className="mt-1 border border-slate-300 px-3 py-2.5 rounded-lg w-full text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-            >
-              {Object.entries(rotulosTipoVeiculo).map(([v, l]) => (
-                <option key={v} value={v}>
-                  {l}
-                </option>
-              ))}
-            </select>
-          </div>
+          <FormField
+            as="select"
+            label="Tipo"
+            required
+            value={form.tipo}
+            onChange={(e) => setForm({ ...form, tipo: e.target.value as Veiculo["tipo"] })}
+          >
+            {Object.entries(rotulosTipoVeiculo).map(([v, l]) => (
+              <option key={v} value={v}>
+                {l}
+              </option>
+            ))}
+          </FormField>
 
-          <div>
-            <label className="text-xs font-semibold text-slate-600">
-              Capacidade (passageiros)
-            </label>
-            <input
-              type="number"
-              value={form.capacidade}
-              onChange={(e) =>
-                setForm({
-                  ...form,
-                  capacidade: parseInt(e.target.value) || 0,
-                })
-              }
-              min={1}
-              max={100}
-              className="mt-1 border border-slate-300 px-3 py-2.5 rounded-lg w-full text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="15"
-            />
-          </div>
+          <FormField
+            label="Capacidade (passageiros)"
+            type="number"
+            value={form.capacidade}
+            onChange={(e) =>
+              setForm({ ...form, capacidade: parseInt(e.target.value) || 0 })
+            }
+            min={1}
+            max={100}
+            placeholder="15"
+          />
 
-          <div>
-            <label className="text-xs font-semibold text-slate-600">
-              Combustível
-            </label>
-            <select
-              value={form.combustivel}
-              onChange={(e) =>
-                setForm({
-                  ...form,
-                  combustivel: e.target.value as Veiculo["combustivel"],
-                })
-              }
-              className="mt-1 border border-slate-300 px-3 py-2.5 rounded-lg w-full text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-            >
-              <option value="diesel">Diesel</option>
-              <option value="gasolina">Gasolina</option>
-              <option value="etanol">Etanol</option>
-              <option value="flex">Flex</option>
-              <option value="eletrico">Elétrico</option>
-            </select>
-          </div>
+          <FormField
+            as="select"
+            label="Combustível"
+            value={form.combustivel}
+            onChange={(e) =>
+              setForm({ ...form, combustivel: e.target.value as Veiculo["combustivel"] })
+            }
+          >
+            <option value="diesel">Diesel</option>
+            <option value="gasolina">Gasolina</option>
+            <option value="etanol">Etanol</option>
+            <option value="flex">Flex</option>
+            <option value="eletrico">Elétrico</option>
+          </FormField>
         </div>
-      </div>
+      </FormSection>
 
       {/* Documentação */}
-      <div>
-        <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">
-          📋 Documentação
-        </h3>
+      <FormSection title="Documentação" icon={FileText}>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          <div>
-            <label className="text-xs font-semibold text-slate-600">
-              Chassi
-            </label>
-            <input
-              type="text"
-              value={form.chassi}
-              onChange={(e) =>
-                setForm({ ...form, chassi: e.target.value.toUpperCase() })
-              }
-              className="mt-1 border border-slate-300 px-3 py-2.5 rounded-lg w-full text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="9BWZZZ377VT004251"
-              maxLength={17}
-            />
-          </div>
-
-          <div>
-            <label className="text-xs font-semibold text-slate-600">
-              RENAVAM
-            </label>
-            <input
-              type="text"
-              value={form.renavam}
-              onChange={(e) =>
-                setForm({
-                  ...form,
-                  renavam: e.target.value.replace(/\D/g, "").slice(0, 11),
-                })
-              }
-              className="mt-1 border border-slate-300 px-3 py-2.5 rounded-lg w-full text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="00000000000"
-            />
-          </div>
-
-          <div>
-            <label className="text-xs font-semibold text-slate-600">
-              Vencimento Licenciamento
-            </label>
-            <input
-              type="date"
-              value={form.vencimento_licenciamento}
-              onChange={(e) =>
-                setForm({ ...form, vencimento_licenciamento: e.target.value })
-              }
-              className="mt-1 border border-slate-300 px-3 py-2.5 rounded-lg w-full text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-
-          <div>
-            <label className="text-xs font-semibold text-slate-600">
-              Vencimento Seguro
-            </label>
-            <input
-              type="date"
-              value={form.vencimento_seguro}
-              onChange={(e) =>
-                setForm({ ...form, vencimento_seguro: e.target.value })
-              }
-              className="mt-1 border border-slate-300 px-3 py-2.5 rounded-lg w-full text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
+          <FormField
+            label="Chassi"
+            value={form.chassi}
+            onChange={(e) =>
+              setForm({ ...form, chassi: e.target.value.toUpperCase() })
+            }
+            className="font-mono"
+            placeholder="9BWZZZ377VT004251"
+            maxLength={17}
+          />
+          <FormField
+            label="RENAVAM"
+            value={form.renavam}
+            onChange={(e) =>
+              setForm({
+                ...form,
+                renavam: e.target.value.replace(/\D/g, "").slice(0, 11),
+              })
+            }
+            className="font-mono"
+            placeholder="00000000000"
+          />
+          <FormField
+            label="Vencimento Licenciamento"
+            type="date"
+            value={form.vencimento_licenciamento}
+            onChange={(e) =>
+              setForm({ ...form, vencimento_licenciamento: e.target.value })
+            }
+          />
+          <FormField
+            label="Vencimento Seguro"
+            type="date"
+            value={form.vencimento_seguro}
+            onChange={(e) =>
+              setForm({ ...form, vencimento_seguro: e.target.value })
+            }
+          />
         </div>
-      </div>
+      </FormSection>
 
       {/* Status */}
-      <div>
-        <label className="text-xs font-semibold text-slate-600">Status</label>
-        <div className="mt-2 grid grid-cols-3 gap-2">
-          {[
-            { v: "ativo", l: "✅ Ativo", cor: "green" },
-            { v: "manutencao", l: "🔧 Manutenção", cor: "amber" },
-            { v: "inativo", l: "🚫 Inativo", cor: "slate" },
-          ].map((s) => (
-            <button
-              key={s.v}
-              type="button"
-              onClick={() =>
-                setForm({ ...form, status: s.v as Veiculo["status"] })
-              }
-              className={`py-2.5 rounded-lg text-sm font-semibold transition active:scale-95 border-2 ${
-                form.status === s.v
-                  ? s.cor === "green"
-                    ? "bg-green-50 border-green-500 text-green-700"
-                    : s.cor === "amber"
-                    ? "bg-amber-50 border-amber-500 text-amber-700"
-                    : "bg-slate-100 border-slate-400 text-slate-700"
-                  : "bg-white border-slate-200 text-slate-500 hover:border-slate-300"
-              }`}
-            >
-              {s.l}
-            </button>
-          ))}
+      <FormSection title="Status Operacional" icon={Activity}>
+        <div className="grid grid-cols-3 gap-2">
+          {STATUS_OPTIONS.map((s) => {
+            const Icon = s.icon;
+            const isActive = form.status === s.value;
+            return (
+              <button
+                key={s.value}
+                type="button"
+                onClick={() => setForm({ ...form, status: s.value })}
+                className={`py-3 rounded-xl text-sm font-semibold transition active:scale-95 border-2 flex items-center justify-center gap-2 ${
+                  isActive ? s.colors.active : s.colors.inactive
+                }`}
+              >
+                <Icon className="w-4 h-4" strokeWidth={2.2} />
+                {s.label}
+              </button>
+            );
+          })}
         </div>
-      </div>
+      </FormSection>
 
       {/* Observações */}
-      <div>
-        <label className="text-xs font-semibold text-slate-600">
-          Observações
-        </label>
-        <textarea
-          value={form.observacoes}
-          onChange={(e) => setForm({ ...form, observacoes: e.target.value })}
-          className="mt-1 border border-slate-300 px-3 py-2.5 rounded-lg w-full text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
-          rows={3}
-          placeholder="Ex: Ar condicionado, wi-fi, cinto de segurança..."
-        />
-      </div>
+      <FormField
+        as="textarea"
+        label="Observações"
+        value={form.observacoes}
+        onChange={(e) => setForm({ ...form, observacoes: e.target.value })}
+        rows={3}
+        placeholder="Ex: Ar condicionado, wi-fi, cinto de segurança..."
+      />
 
       {/* Botões */}
-      <div className="flex gap-3 pt-4 border-t">
-        <button
+      <div className="flex gap-3 pt-4 border-t border-slate-100">
+        <Button
           type="button"
+          variant="secondary"
+          size="lg"
+          fullWidth
           onClick={onCancelar}
           disabled={salvando}
-          className="flex-1 border border-slate-300 text-slate-700 py-2.5 rounded-lg font-semibold hover:bg-slate-50 transition disabled:opacity-50 active:scale-95"
         >
           Cancelar
-        </button>
-        <button
+        </Button>
+        <Button
           type="submit"
-          disabled={salvando}
-          className="flex-1 bg-blue-600 text-white py-2.5 rounded-lg font-semibold hover:bg-blue-500 transition disabled:opacity-50 active:scale-95"
+          variant="primary"
+          size="lg"
+          fullWidth
+          loading={salvando}
         >
-          {salvando
-            ? "Salvando..."
-            : veiculo
-            ? "Salvar Alterações"
-            : "Cadastrar Veículo"}
-        </button>
+          {veiculo ? "Salvar Alterações" : "Cadastrar Veículo"}
+        </Button>
       </div>
     </form>
   );

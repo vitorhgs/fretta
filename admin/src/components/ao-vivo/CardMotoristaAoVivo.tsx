@@ -1,3 +1,5 @@
+import { Gauge, Clock, TrendingUp } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import type { MotoristaAoVivo } from "../../hooks/useMotoristasAoVivo";
 
 interface CardMotoristaAoVivoProps {
@@ -10,6 +12,7 @@ function iniciais(nome: string): string {
   if (!nome) return "?";
   return nome
     .split(" ")
+    .filter(Boolean)
     .map((n) => n[0])
     .slice(0, 2)
     .join("")
@@ -43,7 +46,6 @@ export default function CardMotoristaAoVivo({
   const emViagem = motorista.em_viagem && online;
   const cor = motorista.rota_cor || "#3B82F6";
 
-  // Barra de progresso das paradas
   const paradasTotais = motorista.paradas_totais || 0;
   const paradasConcluidas = motorista.paradas_concluidas || 0;
   const progresso =
@@ -53,45 +55,44 @@ export default function CardMotoristaAoVivo({
     <button
       onClick={onClick}
       className={`
-        w-full text-left rounded-xl border-2 transition-all p-3
+        btn-press w-full text-left rounded-xl border transition-all p-3
         ${
           selecionado
-            ? "border-blue-500 bg-blue-50 shadow-md"
-            : "border-slate-200 bg-white hover:border-slate-300 hover:shadow-sm"
+            ? "border-blue-500 bg-blue-950/40 shadow-lg shadow-blue-500/10"
+            : "border-slate-700 bg-slate-800/60 hover:border-slate-600 hover:bg-slate-800"
         }
         ${!online ? "opacity-60" : ""}
       `}
     >
-      {/* Header do card */}
+      {/* HEADER */}
       <div className="flex items-start gap-3">
-        {/* Avatar com status */}
+        {/* Avatar com status dot */}
         <div className="relative flex-shrink-0">
           <div
-            className="w-11 h-11 rounded-full flex items-center justify-center font-bold text-sm text-white"
+            className="w-11 h-11 rounded-full flex items-center justify-center font-bold text-sm text-white shadow-md"
             style={{
               background: `linear-gradient(135deg, ${cor} 0%, ${cor}dd 100%)`,
             }}
           >
             {iniciais(motorista.motorista_nome)}
           </div>
-          {/* Indicador de status */}
           <div
             className={`
-              absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full border-2 border-white
+              absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full border-2 border-[#09152E]
               ${
                 emViagem
                   ? "bg-green-500 animate-pulse"
                   : online
                   ? "bg-slate-400"
-                  : "bg-slate-300"
+                  : "bg-slate-600"
               }
             `}
           />
         </div>
 
-        {/* Info principal */}
+        {/* Info */}
         <div className="flex-1 min-w-0">
-          <p className="font-bold text-slate-800 text-sm truncate">
+          <p className="font-bold text-white text-sm truncate">
             {motorista.motorista_nome}
           </p>
           {emViagem && motorista.rota_nome ? (
@@ -100,49 +101,49 @@ export default function CardMotoristaAoVivo({
                 className="w-2 h-2 rounded-full flex-shrink-0"
                 style={{ backgroundColor: cor }}
               />
-              <p className="text-xs text-slate-600 truncate font-semibold">
+              <p className="text-xs text-slate-300 truncate font-semibold">
                 {motorista.rota_nome}
               </p>
             </div>
           ) : (
-            <p className="text-xs text-slate-500 mt-0.5">
+            <p className="text-xs text-slate-400 mt-0.5">
               {online ? "Disponível" : "Offline"}
             </p>
           )}
         </div>
 
         {/* Badge de status */}
-        <div
+        <span
           className={`
             text-[9px] font-bold uppercase tracking-wider px-2 py-1 rounded-full flex-shrink-0
             ${
               emViagem
-                ? "bg-green-100 text-green-700"
+                ? "bg-green-500/20 text-green-400 border border-green-500/30"
                 : online
-                ? "bg-slate-100 text-slate-600"
-                : "bg-slate-100 text-slate-400"
+                ? "bg-slate-700 text-slate-300"
+                : "bg-slate-800 text-slate-500"
             }
           `}
         >
           {emViagem ? "Em viagem" : online ? "Online" : "Offline"}
-        </div>
+        </span>
       </div>
 
-      {/* Métricas — só se em viagem */}
+      {/* MÉTRICAS - só se em viagem */}
       {emViagem && (
         <>
-          {/* Barra de progresso */}
+          {/* Progresso */}
           {paradasTotais > 0 && (
             <div className="mt-3">
               <div className="flex items-center justify-between mb-1.5">
-                <span className="text-[10px] font-bold text-slate-500 uppercase">
+                <span className="text-[10px] font-bold text-slate-400 uppercase">
                   Progresso
                 </span>
-                <span className="text-[10px] font-bold text-slate-700">
+                <span className="text-[10px] font-bold text-white">
                   {paradasConcluidas}/{paradasTotais} paradas
                 </span>
               </div>
-              <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
+              <div className="w-full h-1.5 bg-slate-700/60 rounded-full overflow-hidden">
                 <div
                   className="h-full rounded-full transition-all"
                   style={{
@@ -156,40 +157,56 @@ export default function CardMotoristaAoVivo({
 
           {/* Stats */}
           <div className="mt-3 grid grid-cols-3 gap-2">
-            <div className="text-center bg-slate-50 rounded-lg py-1.5">
-              <p className="text-sm font-bold text-slate-800 leading-none">
-                {Math.round(motorista.velocidade_kmh)}
-              </p>
-              <p className="text-[9px] text-slate-500 font-semibold uppercase mt-1">
-                km/h
-              </p>
-            </div>
-            <div className="text-center bg-slate-50 rounded-lg py-1.5">
-              <p className="text-sm font-bold text-slate-800 leading-none">
-                {tempoDesde(motorista.iniciada_em)}
-              </p>
-              <p className="text-[9px] text-slate-500 font-semibold uppercase mt-1">
-                tempo
-              </p>
-            </div>
-            <div className="text-center bg-slate-50 rounded-lg py-1.5">
-              <p className="text-sm font-bold text-slate-800 leading-none">
-                {Math.round(progresso)}%
-              </p>
-              <p className="text-[9px] text-slate-500 font-semibold uppercase mt-1">
-                completo
-              </p>
-            </div>
+            <MetricaMini
+              icon={Gauge}
+              value={Math.round(motorista.velocidade_kmh).toString()}
+              label="km/h"
+            />
+            <MetricaMini
+              icon={Clock}
+              value={tempoDesde(motorista.iniciada_em)}
+              label="tempo"
+            />
+            <MetricaMini
+              icon={TrendingUp}
+              value={`${Math.round(progresso)}%`}
+              label="completo"
+            />
           </div>
         </>
       )}
 
-      {/* Última atualização (só se offline ou parado) */}
+      {/* Última atualização */}
       {!emViagem && (
-        <p className="text-[10px] text-slate-400 mt-2">
+        <p className="text-[10px] text-slate-500 mt-2">
           Atualizado {tempoAtualizado(motorista.atualizado_em)}
         </p>
       )}
     </button>
+  );
+}
+
+/* =========================
+   MÉTRICA MINI
+========================= */
+function MetricaMini({
+  icon: Icon,
+  value,
+  label,
+}: {
+  icon: LucideIcon;
+  value: string;
+  label: string;
+}) {
+  return (
+    <div className="text-center bg-slate-900/50 border border-slate-800 rounded-lg py-2">
+      <div className="flex items-center justify-center gap-1 mb-0.5">
+        <Icon className="w-3 h-3 text-slate-400" strokeWidth={2.2} />
+        <p className="text-sm font-bold text-white leading-none">{value}</p>
+      </div>
+      <p className="text-[9px] text-slate-500 font-semibold uppercase mt-0.5">
+        {label}
+      </p>
+    </div>
   );
 }

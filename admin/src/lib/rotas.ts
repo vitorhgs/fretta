@@ -1,3 +1,5 @@
+import { Sun, CloudSun, Moon, MoonStar, Circle } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import type { Rota } from "../types/database";
 
 /**
@@ -23,16 +25,16 @@ export function getStatusRota(
 }
 
 /**
- * Icone do turno
+ * Ícone Lucide do turno
  */
-export function iconeTurno(turno: string): string {
-  const map: Record<string, string> = {
-    Manhã: "☀",
-    Tarde: "🌤",
-    Noite: "🌙",
-    Madrugada: "🌑",
+export function iconeTurno(turno: string): LucideIcon {
+  const map: Record<string, LucideIcon> = {
+    Manhã: Sun,
+    Tarde: CloudSun,
+    Noite: Moon,
+    Madrugada: MoonStar,
   };
-  return map[turno] || "•";
+  return map[turno] || Circle;
 }
 
 /**

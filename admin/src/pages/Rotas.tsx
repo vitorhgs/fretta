@@ -1,25 +1,58 @@
-import { useState, useEffect, useRef, useMemo } from "react";
+import type { LatLngExpression } from "leaflet";
+import L from "leaflet";
+import "leaflet/dist/leaflet.css";
+import {
+  Archive,
+  ArrowLeft,
+  ArrowRight,
+  Building2,
+  ChevronDown,
+  ChevronUp,
+  CircleDot,
+  Copy,
+  Crosshair,
+  Download,
+  Eye,
+  Info,
+  KeyRound,
+  Map as MapIcon,
+  Moon as MoonIcon,
+  MoreVertical,
+  Navigation,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Pause,
+  Pencil,
+  Satellite,
+  Trash2,
+  Type,
+  Undo2,
+  X
+} from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   MapContainer,
-  TileLayer,
-  Polyline,
   Marker,
+  Polyline,
   Popup,
+  TileLayer,
   useMap,
   useMapEvents,
 } from "react-leaflet";
-import L from "leaflet";
-import type { LatLngExpression } from "leaflet";
-import "leaflet/dist/leaflet.css";
-import { supabase } from "../supabase";
 import Modal from "../components/Modal";
+import ConfirmDialog from "../components/ConfirmDialog";
+import { SkeletonRotasList } from "../components/ui/Skeleton";
 import FormGerarPin from "../components/pins/FormGerarPin";
 import PinGerado from "../components/pins/PinGerado";
-import SeletorTurnos from "../components/rotas/SeletorTurnos";
-import SeletorStatus from "../components/rotas/SeletorStatus";
 import BadgeStatus from "../components/rotas/BadgeStatus";
 import BadgeTurnos from "../components/rotas/BadgeTurnos";
-import { getTurnosRota, getStatusRota } from "../lib/rotas";
+import BadgeLinha from "../components/rotas/BadgeLinha";   
+import ModalVincularLinha from "../components/rotas/ModalVincularLinha";
+import SeletorStatus from "../components/rotas/SeletorStatus";
+import SeletorTurnos from "../components/rotas/SeletorTurnos";
+import { getStatusRota, getTurnosRota } from "../lib/rotas";
+import { supabase } from "../supabase";
+
 
 /* =========================
    TIPOS
@@ -47,6 +80,15 @@ interface RotaSalva {
   status_rota?: StatusRota;
   dias_semana?: number[];
   horario_saida?: string;
+  linha_id?: string | null;
+}
+
+interface LinhaResumo {
+  id: string;
+  nome: string;
+  cor: string;
+  cliente_nome_fantasia?: string | null;
+  status: string;
 }
 
 /* =========================
@@ -67,7 +109,7 @@ const categorias = ["Ida", "Volta", "Circular", "Especial"];
 const TURNOS_FILTRO = ["Manhã", "Tarde", "Noite", "Madrugada"];
 
 /* =========================
-   ÍCONES
+   ÍCONES DO MAPA
 ========================= */
 const bandeiraIcon = new L.DivIcon({
   className: "marker-pop-in",
@@ -241,6 +283,7 @@ function Rotas() {
   const [pontos, setPontos] = useState<LatLngExpression[]>([]);
   const [rotaAtual, setRotaAtual] = useState<LatLngExpression[]>([]);
   const [rotas, setRotas] = useState<RotaSalva[]>([]);
+  const [carregandoRotas, setCarregandoRotas] = useState(true);
   const [rotaSelecionada, setRotaSelecionada] = useState<RotaSalva | null>(
     null
   );
@@ -267,6 +310,7 @@ function Rotas() {
   const [confirmarExclusao, setConfirmarExclusao] = useState<RotaSalva | null>(
     null
   );
+  const [excluindo, setExcluindo] = useState(false);
   const [rotaPreview, setRotaPreview] = useState<string | null>(null);
   const [calculando, setCalculando] = useState(false);
   const [tipoMapa, setTipoMapa] = useState<"claro" | "satelite" | "escuro">(
@@ -288,17 +332,17 @@ function Rotas() {
   const [modalRota, setModalRota] = useState<RotaSalva | null>(null);
   const [sentidoInvertido, setSentidoInvertido] = useState(false);
 
-  // 🆕 Turnos múltiplos + status
   const [turnosAtendidos, setTurnosAtendidos] = useState<string[]>([]);
   const [statusRota, setStatusRota] = useState<StatusRota>("ativa");
+  const [linhas, setLinhas] = useState<LinhaResumo[]>([]);
+  const [linhaId, setLinhaId] = useState<string>("");
 
-  // 🆕 Filtros
   const [filtroStatus, setFiltroStatus] = useState<"todos" | StatusRota>("todos");
   const [filtroTurno, setFiltroTurno] = useState<string>("todos");
 
-  // Modais de PIN
   const [rotaLiberarPin, setRotaLiberarPin] = useState<RotaSalva | null>(null);
   const [pinRecemGerado, setPinRecemGerado] = useState<string | null>(null);
+  const [rotaVincularLinha, setRotaVincularLinha] = useState<RotaSalva | null>(null);
 
   const intervalRef = useRef<number | null>(null);
   const rotaCompletaRef = useRef<LatLngExpression[]>([]);
@@ -306,6 +350,7 @@ function Rotas() {
 
   useEffect(() => {
     carregarRotas();
+    carregarLinhas();
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
@@ -361,6 +406,9 @@ function Rotas() {
   }, [pontos, nomeRota, rotaAtual, modoEdicao, menuAberto, paradaEditando, confirmarExclusao, modalRota]);
 
   const carregarRotas = async () => {
+  setCarregandoRotas(true);
+
+  try {
     const { data, error } = await supabase
       .from("rotas")
       .select("*")
@@ -384,7 +432,23 @@ function Rotas() {
       }));
       setRotas(rotasNormalizadas);
     }
-  };
+  } finally {
+    setCarregandoRotas(false);
+  }
+};
+
+
+      const carregarLinhas = async () => {
+    const { data, error } = await supabase
+    .from("linhas")
+    .select("id, nome, cor, cliente_nome_fantasia, status")
+    .eq("status", "ativa")
+    .order("nome", { ascending: true });
+
+  if (!error && data) {
+    setLinhas(data);
+  }
+};
 
   const adicionarPonto = (p: LatLngExpression) => {
     setRotaSelecionada(null);
@@ -414,6 +478,7 @@ function Rotas() {
     setTurnosAtendidos([]);
     setStatusRota("ativa");
     setHorarioSaida("");
+    setLinhaId("");
   };
 
   const cancelarEdicao = async () => {
@@ -434,6 +499,7 @@ function Rotas() {
         status_rota: backup.status_rota || "ativa",
         dias_semana: backup.dias_semana,
         horario_saida: backup.horario_saida,
+        linha_id: linhaId || null,
       },
     ]);
     if (error) {
@@ -635,7 +701,7 @@ function Rotas() {
             cor,
             paradas_info: paradasInfo,
             categoria: categoria || null,
-            turno: turnosAtendidos[0] || null, // mantém compat
+            turno: turnosAtendidos[0] || null,
             turnos_atendidos: turnosAtendidos,
             status_rota: statusRota,
             horario_saida: horarioSaida || null,
@@ -692,28 +758,31 @@ function Rotas() {
     });
   };
 
-  const excluirRotaConfirmado = async () => {
-    if (!confirmarExclusao) return;
-    const id = confirmarExclusao.id;
-    const { error } = await supabase.from("rotas").delete().eq("id", id);
-    if (error) {
-      setMensagem({ tipo: "erro", texto: "Erro ao excluir" });
-      return;
-    }
-    if (rotaSelecionada?.id === id) {
-      setRotaSelecionada(null);
-      setRotaAtual([]);
-      setIndiceAnimacao(0);
-      indiceAnimacaoRef.current = 0;
-      rotaCompletaRef.current = [];
-      setDistancia(0);
-      setDuracao(0);
-    }
-    setMenuAberto(null);
-    setConfirmarExclusao(null);
-    setMensagem({ tipo: "sucesso", texto: "Rota excluída" });
-    carregarRotas();
-  };
+const excluirRotaConfirmado = async () => {
+  if (!confirmarExclusao) return;
+  setExcluindo(true);
+  const id = confirmarExclusao.id;
+  const { error } = await supabase.from("rotas").delete().eq("id", id);
+  setExcluindo(false);
+
+  if (error) {
+    setMensagem({ tipo: "erro", texto: "Erro ao excluir" });
+    return;
+  }
+  if (rotaSelecionada?.id === id) {
+    setRotaSelecionada(null);
+    setRotaAtual([]);
+    setIndiceAnimacao(0);
+    indiceAnimacaoRef.current = 0;
+    rotaCompletaRef.current = [];
+    setDistancia(0);
+    setDuracao(0);
+  }
+  setMenuAberto(null);
+  setConfirmarExclusao(null);
+  setMensagem({ tipo: "sucesso", texto: "Rota excluída" });
+  carregarRotas();
+};
 
   const duplicarRota = async (rota: RotaSalva, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -744,7 +813,6 @@ function Rotas() {
     carregarRotas();
   };
 
-  // 🆕 Alterar status rápido
   const alterarStatusRota = async (
     rota: RotaSalva,
     novoStatus: StatusRota,
@@ -801,6 +869,7 @@ function Rotas() {
     setStatusRota(getStatusRota(rota));
     setHorarioSaida(rota.horario_saida || "");
     setDiasSemana(rota.dias_semana || [1, 2, 3, 4, 5]);
+    setLinhaId(rota.linha_id || "");
     setMenuAberto(null);
     setRotaSelecionada(null);
     setModoEdicao({
@@ -915,16 +984,13 @@ function Rotas() {
     }
   };
 
-  // 🆕 Filtros aplicados
   const rotasFiltradas = useMemo(() => {
     let lista = rotas;
 
-    // Filtro por status
     if (filtroStatus !== "todos") {
       lista = lista.filter((r) => getStatusRota(r) === filtroStatus);
     }
 
-    // Filtro por turno
     if (filtroTurno !== "todos") {
       lista = lista.filter((r) => {
         const turnos = getTurnosRota(r);
@@ -932,7 +998,6 @@ function Rotas() {
       });
     }
 
-    // Busca por texto
     if (busca.trim()) {
       const termo = busca.toLowerCase();
       lista = lista.filter(
@@ -946,7 +1011,6 @@ function Rotas() {
     return lista;
   }, [rotas, busca, filtroStatus, filtroTurno]);
 
-  // Contadores por status
   const contadores = useMemo(() => {
     return {
       total: rotas.length,
@@ -1078,24 +1142,18 @@ function Rotas() {
                 <button
                   onClick={() => setPainelAberto(false)}
                   className="btn-press w-8 h-8 flex items-center justify-center rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition"
+                  title="Fechar painel"
                 >
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <rect x="3" y="4" width="18" height="16" rx="2" />
-                    <line x1="9" y1="4" x2="9" y2="20" />
-                    <polyline points="15 10 13 12 15 14" />
-                  </svg>
+                  <PanelLeftClose className="w-4 h-4" strokeWidth={2.2} />
                 </button>
               </>
             ) : (
               <button
                 onClick={() => setPainelAberto(true)}
                 className="btn-press w-8 h-8 flex items-center justify-center rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white mx-auto"
+                title="Abrir painel"
               >
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <rect x="3" y="4" width="18" height="16" rx="2" />
-                  <line x1="9" y1="4" x2="9" y2="20" />
-                  <polyline points="13 10 15 12 13 14" />
-                </svg>
+                <PanelLeftOpen className="w-4 h-4" strokeWidth={2.2} />
               </button>
             )}
           </div>
@@ -1122,14 +1180,16 @@ function Rotas() {
                     title="Ctrl+Z"
                     className="btn-press flex-1 flex items-center justify-center gap-1.5 border border-slate-700 bg-slate-800 text-slate-200 px-3 py-2 rounded-lg text-sm font-medium hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed transition"
                   >
-                    <span>↩</span> Desfazer
+                    <Undo2 className="w-3.5 h-3.5" strokeWidth={2.2} />
+                    Desfazer
                   </button>
                   <button
                     onClick={limpar}
                     disabled={pontos.length === 0 && !rotaSelecionada}
                     className="btn-press flex-1 flex items-center justify-center gap-1.5 border border-red-900/50 bg-red-950/40 text-red-300 px-3 py-2 rounded-lg text-sm font-medium hover:bg-red-900/40 disabled:opacity-40 disabled:cursor-not-allowed transition"
                   >
-                    <span>✕</span> Limpar
+                    <X className="w-3.5 h-3.5" strokeWidth={2.2} />
+                    Limpar
                   </button>
                 </div>
 
@@ -1140,7 +1200,33 @@ function Rotas() {
                   onChange={(e) => setNomeRota(e.target.value)}
                   className="border border-slate-700 bg-slate-800 text-white placeholder-slate-500 px-3 py-2.5 rounded-lg w-full text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
-
+                <div className="relative">
+  <div className="flex items-center gap-1.5 mb-1.5">
+    <Building2 className="w-3 h-3 text-slate-400" strokeWidth={2.2} />
+    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+      Linha / Cliente {linhas.length === 0 && "(nenhuma cadastrada)"}
+    </label>
+  </div>
+  <select
+    value={linhaId}
+    onChange={(e) => setLinhaId(e.target.value)}
+    disabled={linhas.length === 0}
+    className="border border-slate-700 bg-slate-800 text-white px-3 py-2.5 rounded-lg w-full text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+  >
+    <option value="">Sem vínculo</option>
+    {linhas.map((l) => (
+      <option key={l.id} value={l.id}>
+        {l.nome}
+        {l.cliente_nome_fantasia ? ` — ${l.cliente_nome_fantasia}` : ""}
+      </option>
+    ))}
+  </select>
+  {linhas.length === 0 && (
+    <p className="text-[10px] text-slate-500 mt-1 italic">
+      Cadastre linhas em "Linhas & Rotas → Linhas" pra vincular
+    </p>
+  )}
+</div>
                 {pontos.length >= 2 && (
                   <div className="space-y-3 pt-2 border-t border-slate-800">
                     {/* Categoria */}
@@ -1155,7 +1241,7 @@ function Rotas() {
                       ))}
                     </select>
 
-                    {/* 🆕 Turnos múltiplos (com card branco por dentro) */}
+                    {/* Turnos múltiplos */}
                     <div className="bg-slate-800/50 rounded-lg p-3 border border-slate-700">
                       <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2 block">
                         Turnos atendidos
@@ -1169,7 +1255,7 @@ function Rotas() {
                       </div>
                     </div>
 
-                    {/* 🆕 Status */}
+                    {/* Status */}
                     <div className="bg-slate-800/50 rounded-lg p-3 border border-slate-700">
                       <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2 block">
                         Status da rota
@@ -1224,9 +1310,10 @@ function Rotas() {
                 {modoEdicao.ativo && (
                   <button
                     onClick={cancelarEdicao}
-                    className="btn-press w-full border border-slate-600 bg-slate-800 text-slate-200 px-4 py-2.5 rounded-lg text-sm font-semibold hover:bg-slate-700 transition"
+                    className="btn-press w-full flex items-center justify-center gap-1.5 border border-slate-600 bg-slate-800 text-slate-200 px-4 py-2.5 rounded-lg text-sm font-semibold hover:bg-slate-700 transition"
                   >
-                    ✕ Cancelar Edição
+                    <X className="w-3.5 h-3.5" strokeWidth={2.2} />
+                    Cancelar Edição
                   </button>
                 )}
 
@@ -1273,22 +1360,25 @@ function Rotas() {
                             <button
                               onClick={() => moverParada(i, -1)}
                               disabled={i === 0}
-                              className="btn-press w-6 h-6 rounded text-slate-400 hover:text-white hover:bg-slate-700 text-xs disabled:opacity-30"
+                              className="btn-press w-6 h-6 rounded text-slate-400 hover:text-white hover:bg-slate-700 flex items-center justify-center disabled:opacity-30"
+                              title="Mover para cima"
                             >
-                              ▲
+                              <ChevronUp className="w-3.5 h-3.5" strokeWidth={2.5} />
                             </button>
                             <button
                               onClick={() => moverParada(i, 1)}
                               disabled={i === pontos.length - 1}
-                              className="btn-press w-6 h-6 rounded text-slate-400 hover:text-white hover:bg-slate-700 text-xs disabled:opacity-30"
+                              className="btn-press w-6 h-6 rounded text-slate-400 hover:text-white hover:bg-slate-700 flex items-center justify-center disabled:opacity-30"
+                              title="Mover para baixo"
                             >
-                              ▼
+                              <ChevronDown className="w-3.5 h-3.5" strokeWidth={2.5} />
                             </button>
                             <button
                               onClick={() => abrirEditorParada(i)}
-                              className="btn-press w-6 h-6 rounded text-slate-400 hover:text-white hover:bg-slate-700 text-xs"
+                              className="btn-press w-6 h-6 rounded text-slate-400 hover:text-white hover:bg-slate-700 flex items-center justify-center"
+                              title="Editar parada"
                             >
-                              ✎
+                              <Pencil className="w-3 h-3" strokeWidth={2.2} />
                             </button>
                           </div>
                         </div>
@@ -1345,14 +1435,15 @@ function Rotas() {
                   {busca && (
                     <button
                       onClick={() => setBusca("")}
-                      className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white"
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white p-1"
+                      title="Limpar busca"
                     >
-                      ✕
+                      <X className="w-3.5 h-3.5" strokeWidth={2.2} />
                     </button>
                   )}
                 </div>
 
-                {/* 🆕 Filtros de Status */}
+                {/* Filtros de Status */}
                 <div className="flex gap-1">
                   {[
                     { v: "todos" as const, l: "Todas", c: contadores.total },
@@ -1375,7 +1466,7 @@ function Rotas() {
                   ))}
                 </div>
 
-                {/* 🆕 Filtros de Turno */}
+                {/* Filtros de Turno */}
                 <div className="flex gap-1 flex-wrap">
                   <button
                     onClick={() => setFiltroTurno("todos")}
@@ -1410,22 +1501,18 @@ function Rotas() {
                   </div>
                 )}
 
-                {rotas.length === 0 && (
-                  <div className="space-y-2">
-                    {[1, 2, 3].map((i) => (
-                      <div
-                        key={i}
-                        className="skeleton h-16 bg-slate-800/60 rounded-lg"
-                      />
-                    ))}
-                  </div>
-                )}
+{carregandoRotas && <SkeletonRotasList count={4} />}
 
-                {rotas.length > 0 && rotasFiltradas.length === 0 && (
-                  <p className="text-slate-500 text-sm py-4 text-center">
-                    Nenhuma rota encontrada com os filtros atuais
-                  </p>
-                )}
+                {!carregandoRotas && rotas.length === 0 && (
+  <p className="text-slate-500 text-sm py-4 text-center">
+    Nenhuma rota cadastrada ainda
+  </p>
+)}
+{!carregandoRotas && rotas.length > 0 && rotasFiltradas.length === 0 && (
+  <p className="text-slate-500 text-sm py-4 text-center">
+    Nenhuma rota encontrada com os filtros atuais
+  </p>
+)}
 
                 {rotasFiltradas.map((rota) => {
                   const emComparacao = rotasComparacao.has(rota.id);
@@ -1433,7 +1520,6 @@ function Rotas() {
                   const status = getStatusRota(rota);
                   const turnos = getTurnosRota(rota);
                   const arquivada = status === "arquivada";
-                  
 
                   return (
                     <div
@@ -1462,7 +1548,9 @@ function Rotas() {
                             className="border border-slate-600 bg-slate-900 text-white px-2 py-1.5 rounded-md flex-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                           />
                           <button onClick={() => salvarEdicao(rota.id)} className="btn-press bg-blue-600 text-white px-2.5 py-1.5 rounded-md text-xs font-medium hover:bg-blue-500">OK</button>
-                          <button onClick={() => setEditandoId(null)} className="btn-press border border-slate-600 text-slate-300 px-2.5 py-1.5 rounded-md text-xs hover:bg-slate-700">✕</button>
+                          <button onClick={() => setEditandoId(null)} className="btn-press border border-slate-600 text-slate-300 px-2.5 py-1.5 rounded-md text-xs hover:bg-slate-700 flex items-center">
+                            <X className="w-3 h-3" strokeWidth={2.2} />
+                          </button>
                         </div>
                       ) : (
                         <div className="flex justify-between items-start gap-2">
@@ -1486,18 +1574,28 @@ function Rotas() {
                               </p>
                             </div>
 
-                            {/* 🆕 Badges de status e turnos */}
-                            <div className="flex items-center gap-1.5 flex-wrap mb-1.5">
-                              <BadgeStatus status={status} size="sm" />
-                              {turnos.length > 0 && (
-                                <BadgeTurnos turnos={turnos} size="sm" compact />
-                              )}
-                              {rota.categoria && (
-                                <span className="text-[9px] bg-slate-700 text-slate-300 px-1.5 py-0.5 rounded uppercase tracking-wide">
-                                  {rota.categoria}
-                                </span>
-                              )}
-                            </div>
+                            {/* Badges de status e turnos */}
+<div className="flex items-center gap-1.5 flex-wrap mb-1.5">
+  <BadgeStatus status={status} size="sm" />
+  {turnos.length > 0 && (
+    <BadgeTurnos turnos={turnos} size="sm" compact />
+  )}
+  {rota.categoria && (
+    <span className="text-[9px] bg-slate-700 text-slate-300 px-1.5 py-0.5 rounded uppercase tracking-wide">
+      {rota.categoria}
+    </span>
+  )}
+
+  {/* 🆕 Badge da linha (ou botão pra vincular) */}
+  <BadgeLinha
+    nomeLinha={linhas.find((l) => l.id === rota.linha_id)?.nome}
+    corLinha={linhas.find((l) => l.id === rota.linha_id)?.cor}
+    clienteFantasia={
+      linhas.find((l) => l.id === rota.linha_id)?.cliente_nome_fantasia
+    }
+    onClick={() => setRotaVincularLinha(rota)}
+  />
+</div>
 
                             <p className="text-xs text-slate-400 leading-relaxed">
                               {rota.pontos_originais.length} parada
@@ -1518,38 +1616,45 @@ function Rotas() {
                               onClick={() =>
                                 setMenuAberto(menuAberto === rota.id ? null : rota.id)
                               }
-                              className="btn-press w-7 h-7 flex items-center justify-center rounded-md text-slate-400 hover:bg-slate-700 hover:text-white transition text-base"
+                              className="btn-press w-7 h-7 flex items-center justify-center rounded-md text-slate-400 hover:bg-slate-700 hover:text-white transition"
+                              title="Opções"
                             >
-                              ⋮
+                              <MoreVertical className="w-4 h-4" strokeWidth={2.2} />
                             </button>
 
                             {menuAberto === rota.id && (
                               <div className="fade-in absolute right-0 top-8 z-[600] bg-white border border-slate-200 rounded-lg shadow-xl overflow-hidden min-w-[220px]">
                                 <button onClick={() => { selecionarRota(rota); setMenuAberto(null); }} className="btn-press flex items-center gap-2 w-full px-3 py-2 text-sm text-slate-700 hover:bg-slate-50">
-                                  <span>👁</span> Visualizar
+                                  <Eye className="w-4 h-4" strokeWidth={2} />
+                                  Visualizar
                                 </button>
                                 <button onClick={() => { setModalRota(rota); setMenuAberto(null); }} className="btn-press flex items-center gap-2 w-full px-3 py-2 text-sm text-slate-700 hover:bg-slate-50">
-                                  <span>ℹ</span> Detalhes
+                                  <Info className="w-4 h-4" strokeWidth={2} />
+                                  Detalhes
                                 </button>
                                 <button onClick={(e) => duplicarRota(rota, e)} className="btn-press flex items-center gap-2 w-full px-3 py-2 text-sm text-slate-700 hover:bg-slate-50">
-                                  <span>⧉</span> Duplicar
+                                  <Copy className="w-4 h-4" strokeWidth={2} />
+                                  Duplicar
                                 </button>
                                 <button onClick={(e) => editarRota(rota, e)} className="btn-press flex items-center gap-2 w-full px-3 py-2 text-sm text-slate-700 hover:bg-slate-50">
-                                  <span>✎</span> Editar no mapa
+                                  <Pencil className="w-4 h-4" strokeWidth={2} />
+                                  Editar no mapa
                                 </button>
                                 <button onClick={(e) => iniciarEdicao(rota, e)} className="btn-press flex items-center gap-2 w-full px-3 py-2 text-sm text-slate-700 hover:bg-slate-50">
-                                  <span>Aa</span> Renomear
+                                  <Type className="w-4 h-4" strokeWidth={2} />
+                                  Renomear
                                 </button>
 
                                 <div className="border-t border-slate-100" />
 
-                                {/* 🆕 Ações de status */}
+                                {/* Ações de status */}
                                 {status !== "ativa" && (
                                   <button
                                     onClick={(e) => alterarStatusRota(rota, "ativa", e)}
                                     className="btn-press flex items-center gap-2 w-full px-3 py-2 text-sm text-green-700 hover:bg-green-50 font-semibold"
                                   >
-                                    <span>●</span> Ativar rota
+                                    <CircleDot className="w-4 h-4" strokeWidth={2} />
+                                    Ativar rota
                                   </button>
                                 )}
                                 {status === "ativa" && (
@@ -1557,7 +1662,8 @@ function Rotas() {
                                     onClick={(e) => alterarStatusRota(rota, "pausada", e)}
                                     className="btn-press flex items-center gap-2 w-full px-3 py-2 text-sm text-amber-700 hover:bg-amber-50 font-semibold"
                                   >
-                                    <span>||</span> Pausar rota
+                                    <Pause className="w-4 h-4" strokeWidth={2} />
+                                    Pausar rota
                                   </button>
                                 )}
                                 {status !== "arquivada" && (
@@ -1565,12 +1671,36 @@ function Rotas() {
                                     onClick={(e) => alterarStatusRota(rota, "arquivada", e)}
                                     className="btn-press flex items-center gap-2 w-full px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
                                   >
-                                    <span>▤</span> Arquivar
+                                    <Archive className="w-4 h-4" strokeWidth={2} />
+                                    Arquivar
                                   </button>
                                 )}
 
                                 <div className="border-t border-slate-100" />
+{/* 🆕 Vincular à linha */}
+<button
+  onClick={(e) => {
+    e.stopPropagation();
+    setRotaVincularLinha(rota);
+    setMenuAberto(null);
+  }}
+  className="btn-press flex items-center gap-2 w-full px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 font-semibold"
+>
+  <Building2 className="w-4 h-4" strokeWidth={2} />
+  Vincular à linha
+</button>
 
+<button
+  onClick={(e) => {
+    e.stopPropagation();
+    setRotaLiberarPin(rota);
+    setMenuAberto(null);
+  }}
+  className="btn-press flex items-center gap-2 w-full px-3 py-2 text-sm text-blue-700 hover:bg-blue-50 font-semibold"
+>
+  <KeyRound className="w-4 h-4" strokeWidth={2} />
+  Liberar Edição via App
+</button>
                                 <button
                                   onClick={(e) => {
                                     e.stopPropagation();
@@ -1579,10 +1709,12 @@ function Rotas() {
                                   }}
                                   className="btn-press flex items-center gap-2 w-full px-3 py-2 text-sm text-blue-700 hover:bg-blue-50 font-semibold"
                                 >
-                                  <span>🔓</span> Liberar Edição via App
+                                  <KeyRound className="w-4 h-4" strokeWidth={2} />
+                                  Liberar Edição via App
                                 </button>
                                 <button onClick={(e) => exportarRota(rota, e)} className="btn-press flex items-center gap-2 w-full px-3 py-2 text-sm text-slate-700 hover:bg-slate-50">
-                                  <span>↓</span> Exportar
+                                  <Download className="w-4 h-4" strokeWidth={2} />
+                                  Exportar
                                 </button>
 
                                 <div className="border-t border-slate-100" />
@@ -1595,7 +1727,8 @@ function Rotas() {
                                   }}
                                   className="btn-press flex items-center gap-2 w-full px-3 py-2 text-sm text-red-600 hover:bg-red-50"
                                 >
-                                  <span>🗑</span> Excluir
+                                  <Trash2 className="w-4 h-4" strokeWidth={2} />
+                                  Excluir
                                 </button>
                               </div>
                             )}
@@ -1652,7 +1785,6 @@ function Rotas() {
               })}
 
             {rotas.map((rota) => {
-              // 🆕 Rotas arquivadas ficam invisíveis no mapa (a menos que selecionadas)
               const status = getStatusRota(rota);
               const ehSelecionada = rotaSelecionada?.id === rota.id;
               if (status === "arquivada" && !ehSelecionada) return null;
@@ -1682,7 +1814,6 @@ function Rotas() {
                 );
               }
 
-              // Pausadas ficam mais transparentes
               const opacityFinal =
                 status === "pausada" ? 0.3 : modoComparacao ? 0.2 : 0.6;
 
@@ -1801,35 +1932,29 @@ function Rotas() {
               <button
                 onClick={() => setTipoMapa("claro")}
                 className={`btn-press w-9 h-9 rounded-lg flex items-center justify-center transition ${
-  tipoMapa === "claro" ? "bg-blue-600 text-white" : "text-slate-600 hover:bg-slate-100"
-}`}
+                  tipoMapa === "claro" ? "bg-blue-600 text-white" : "text-slate-600 hover:bg-slate-100"
+                }`}
                 title="Mapa claro"
               >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
-  <path strokeLinecap="round" strokeLinejoin="round" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
-</svg>
+                <MapIcon className="w-4 h-4" strokeWidth={2.2} />
               </button>
               <button
                 onClick={() => setTipoMapa("satelite")}
                 className={`btn-press w-9 h-9 rounded-lg flex items-center justify-center transition ${
-  tipoMapa === "claro" ? "bg-blue-600 text-white" : "text-slate-600 hover:bg-slate-100"
-}`}
+                  tipoMapa === "satelite" ? "bg-blue-600 text-white" : "text-slate-600 hover:bg-slate-100"
+                }`}
                 title="Satélite"
               >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
-  <path strokeLinecap="round" strokeLinejoin="round" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-</svg>
+                <Satellite className="w-4 h-4" strokeWidth={2.2} />
               </button>
               <button
                 onClick={() => setTipoMapa("escuro")}
                 className={`btn-press w-9 h-9 rounded-lg flex items-center justify-center transition ${
-  tipoMapa === "claro" ? "bg-blue-600 text-white" : "text-slate-600 hover:bg-slate-100"
-}`}
+                  tipoMapa === "escuro" ? "bg-blue-600 text-white" : "text-slate-600 hover:bg-slate-100"
+                }`}
                 title="Modo escuro"
               >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
-  <path strokeLinecap="round" strokeLinejoin="round" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
-</svg>
+                <MoonIcon className="w-4 h-4" strokeWidth={2.2} />
               </button>
             </div>
 
@@ -1838,9 +1963,7 @@ function Rotas() {
               className="btn-press bg-white/95 backdrop-blur-md w-11 h-11 rounded-xl shadow-lg border border-slate-200 flex items-center justify-center text-slate-600 hover:bg-slate-100 transition"
               title="Centralizar mapa"
             >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
-  <path strokeLinecap="round" strokeLinejoin="round" d="M12 8c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm8.94 3A8.994 8.994 0 0013 3.06V1h-2v2.06A8.994 8.994 0 003.06 11H1v2h2.06A8.994 8.994 0 0011 20.94V23h2v-2.06A8.994 8.994 0 0020.94 13H23v-2h-2.06zM12 19c-3.87 0-7-3.13-7-7s3.13-7 7-7 7 3.13 7 7-3.13 7-7 7z" />
-</svg>
+              <Crosshair className="w-5 h-5" strokeWidth={2.2} />
             </button>
 
             {rotaSelecionada && (
@@ -1853,7 +1976,7 @@ function Rotas() {
                 }`}
                 title="Setas de direção"
               >
-                ➤
+                <Navigation className="w-5 h-5" strokeWidth={2.2} />
               </button>
             )}
           </div>
@@ -1949,13 +2072,13 @@ function Rotas() {
                         setDuracao(0);
                         setSentidoInvertido(false);
                       }}
-                      className="btn-press w-7 h-7 rounded-full text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition text-lg"
+                      className="btn-press w-7 h-7 rounded-full text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition flex items-center justify-center"
                     >
-                      ✕
+                      <X className="w-4 h-4" strokeWidth={2.2} />
                     </button>
                   </div>
 
-                  {/* 🆕 Badges no card */}
+                  {/* Badges no card */}
                   <div className="flex items-center gap-2 flex-wrap mb-4">
                     <BadgeStatus status={getStatusRota(rotaSelecionada)} size="md" />
                     {getTurnosRota(rotaSelecionada).length > 0 && (
@@ -1972,26 +2095,28 @@ function Rotas() {
                         if (sentidoInvertido) alternarSentido();
                       }}
                       disabled={calculando}
-                      className={`btn-press flex-1 py-2 rounded-lg text-sm font-bold transition ${
+                      className={`btn-press flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-sm font-bold transition ${
                         !sentidoInvertido
                           ? "bg-white text-blue-700 shadow"
                           : "text-slate-500 hover:text-slate-700"
                       }`}
                     >
-                      ▶ Ida
+                      <ArrowRight className="w-3.5 h-3.5" strokeWidth={2.5} />
+                      Ida
                     </button>
                     <button
                       onClick={() => {
                         if (!sentidoInvertido) alternarSentido();
                       }}
                       disabled={calculando}
-                      className={`btn-press flex-1 py-2 rounded-lg text-sm font-bold transition ${
+                      className={`btn-press flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-sm font-bold transition ${
                         sentidoInvertido
                           ? "bg-white text-blue-700 shadow"
                           : "text-slate-500 hover:text-slate-700"
                       }`}
                     >
-                      ◀ Volta
+                      <ArrowLeft className="w-3.5 h-3.5" strokeWidth={2.5} />
+                      Volta
                     </button>
                   </div>
 
@@ -2030,6 +2155,7 @@ function Rotas() {
                     onClick={() => setRotaLiberarPin(rotaSelecionada)}
                     className="btn-press w-full mt-4 bg-blue-50 text-blue-700 border border-blue-200 py-2.5 rounded-lg text-sm font-semibold hover:bg-blue-100 transition flex items-center justify-center gap-2"
                   >
+                    <KeyRound className="w-4 h-4" strokeWidth={2.2} />
                     Liberar Edição via App
                   </button>
                 </div>
@@ -2127,46 +2253,21 @@ function Rotas() {
           </div>
         )}
 
-        {confirmarExclusao && (
-          <div
-            className="fixed inset-0 bg-black/50 z-[2000] flex items-center justify-center p-4"
-            onClick={() => setConfirmarExclusao(null)}
-          >
-            <div
-              className="fade-in bg-white rounded-2xl shadow-2xl max-w-sm w-full p-6"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="text-center mb-4">
-                <div className="w-16 h-16 rounded-full bg-red-100 flex items-center justify-center text-3xl mx-auto mb-3">
-                  !
-                </div>
-                <h3 className="text-lg font-bold text-slate-800">Excluir rota?</h3>
-                <p className="text-sm text-slate-600 mt-1">
-                  Tem certeza que deseja excluir a rota{" "}
-                  <span className="font-bold">"{confirmarExclusao.nome}"</span>?
-                  <br />
-                  <span className="text-red-600 text-xs">Esta ação não pode ser desfeita.</span>
-                </p>
-              </div>
-
-              <div className="flex gap-2">
-                <button
-                  onClick={() => setConfirmarExclusao(null)}
-                  className="btn-press flex-1 border border-slate-300 text-slate-700 py-2.5 rounded-lg font-semibold hover:bg-slate-50"
-                >
-                  Cancelar
-                </button>
-                <button
-                  onClick={excluirRotaConfirmado}
-                  className="btn-press flex-1 bg-red-600 text-white py-2.5 rounded-lg font-semibold hover:bg-red-500"
-                >
-                  Sim, excluir
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
+        <ConfirmDialog
+  aberto={!!confirmarExclusao}
+  onFechar={() => setConfirmarExclusao(null)}
+  onConfirmar={excluirRotaConfirmado}
+  titulo="Excluir rota?"
+  descricao={
+    confirmarExclusao
+      ? `A rota "${confirmarExclusao.nome}" será excluída permanentemente. Todo o histórico de viagens dela será mantido, mas a rota não estará mais disponível. Esta ação não pode ser desfeita.`
+      : ""
+  }
+  textoConfirmar="Sim, excluir"
+  textoCancelar="Cancelar"
+  variant="danger"
+  loading={excluindo}
+/>
         {modalRota && (
           <div
             className="fixed inset-0 bg-black/50 z-[2000] flex items-center justify-center p-4"
@@ -2183,9 +2284,9 @@ function Rotas() {
                 </div>
                 <button
                   onClick={() => setModalRota(null)}
-                  className="btn-press w-8 h-8 rounded-full hover:bg-slate-100"
+                  className="btn-press w-8 h-8 rounded-full hover:bg-slate-100 flex items-center justify-center"
                 >
-                  ✕
+                  <X className="w-4 h-4" strokeWidth={2.2} />
                 </button>
               </div>
 
@@ -2283,6 +2384,46 @@ function Rotas() {
             />
           )}
         </Modal>
+
+        <Modal
+  aberto={!!pinRecemGerado}
+  onFechar={() => setPinRecemGerado(null)}
+  titulo=""
+  tamanho="sm"
+>
+  {pinRecemGerado && (
+    <PinGerado
+      codigo={pinRecemGerado}
+      onFechar={() => setPinRecemGerado(null)}
+    />
+  )}
+</Modal>
+
+{/* 🆕 Modal de Vincular Linha */}
+<Modal
+  aberto={!!rotaVincularLinha}
+  onFechar={() => setRotaVincularLinha(null)}
+  titulo="Vincular à linha"
+  tamanho="md"
+>
+  {rotaVincularLinha && (
+    <ModalVincularLinha
+      rotaId={rotaVincularLinha.id}
+      rotaNome={rotaVincularLinha.nome}
+      linhaAtualId={rotaVincularLinha.linha_id}
+      onSucesso={() => {
+        setRotaVincularLinha(null);
+        setMensagem({
+          tipo: "sucesso",
+          texto: "Linha vinculada com sucesso!",
+        });
+        carregarRotas();
+      }}
+      onCancelar={() => setRotaVincularLinha(null)}
+    />
+  )}
+</Modal>
+
       </div>
     </>
   );
