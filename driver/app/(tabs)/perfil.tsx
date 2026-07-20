@@ -7,12 +7,20 @@ import {
   Alert,
   Animated,
   Platform,
+  Modal,
+  TextInput,
+  KeyboardAvoidingView,
+  ScrollView,
+  ActivityIndicator,
+  Dimensions,
 } from "react-native";
 import { useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { SafeAreaView } from "react-native-safe-area-context";
 import * as LocalAuthentication from "expo-local-authentication";
+import * as Haptics from "expo-haptics";
 import Svg, { Path } from "react-native-svg";
+import { supabase } from "../../supabase";
 import { useAuth } from "../../contexts/AuthContext";
 import { colors, shadows } from "../../theme/colors";
 import {
@@ -24,7 +32,8 @@ import {
   mascararEmail,
 } from "../../lib/masks";
 
-const TEMPO_REVELACAO = 30; // segundos
+const TEMPO_REVELACAO = 30;
+const { height: SCREEN_HEIGHT } = Dimensions.get("window");
 
 /* =========================
    ÍCONES SVG
@@ -65,6 +74,34 @@ function IconeAtualizar({ size = 18 }: { size?: number }) {
   );
 }
 
+function IconeFechar({ size = 22 }: { size?: number }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill={colors.textPrimary}>
+      <Path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" />
+    </Svg>
+  );
+}
+
+function IconeOlho({ visivel, size = 20 }: { visivel: boolean; size?: number }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill={colors.textSecondary}>
+      {visivel ? (
+        <Path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z" />
+      ) : (
+        <Path d="M12 7c2.76 0 5 2.24 5 5 0 .65-.13 1.26-.36 1.83l2.92 2.92c1.51-1.26 2.7-2.89 3.43-4.75-1.73-4.39-6-7.5-11-7.5-1.4 0-2.74.25-3.98.7l2.16 2.16C10.74 7.13 11.35 7 12 7zM2 4.27l2.28 2.28.46.46C3.08 8.3 1.78 10.02 1 12c1.73 4.39 6 7.5 11 7.5 1.55 0 3.03-.3 4.38-.84l.42.42L19.73 22 21 20.73 3.27 3 2 4.27zM7.53 9.8l1.55 1.55c-.05.21-.08.43-.08.65 0 1.66 1.34 3 3 3 .22 0 .44-.03.65-.08l1.55 1.55c-.67.33-1.41.53-2.2.53-2.76 0-5-2.24-5-5 0-.79.2-1.53.53-2.2zm4.31-.78l3.15 3.15.02-.16c0-1.66-1.34-3-3-3l-.17.01z" />
+      )}
+    </Svg>
+  );
+}
+
+function IconeCheckSucesso({ size = 40 }: { size?: number }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill={colors.success}>
+      <Path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" />
+    </Svg>
+  );
+}
+
 /* =========================
    HELPERS
 ========================= */
@@ -79,7 +116,7 @@ function iniciais(nome: string): string {
 }
 
 /* =========================
-   COMPONENTE
+   COMPONENTE PRINCIPAL
 ========================= */
 export default function Perfil() {
   const router = useRouter();
@@ -88,12 +125,12 @@ export default function Perfil() {
   const [revelado, setRevelado] = useState(false);
   const [tempoRestante, setTempoRestante] = useState(TEMPO_REVELACAO);
   const [autenticando, setAutenticando] = useState(false);
+  const [modalSenha, setModalSenha] = useState(false);
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const timerRef = useRef<any>(null);
   const contadorRef = useRef<any>(null);
 
-  // Anima o fade ao revelar/esconder
   useEffect(() => {
     Animated.timing(fadeAnim, {
       toValue: revelado ? 1 : 0,
@@ -102,7 +139,6 @@ export default function Perfil() {
     }).start();
   }, [revelado]);
 
-  // Contador regressivo
   useEffect(() => {
     if (revelado) {
       setTempoRestante(TEMPO_REVELACAO);
@@ -132,12 +168,10 @@ export default function Perfil() {
     setAutenticando(true);
 
     try {
-      // Verifica se o dispositivo suporta biometria
       const compativel = await LocalAuthentication.hasHardwareAsync();
       const cadastrado = await LocalAuthentication.isEnrolledAsync();
 
       if (compativel && cadastrado) {
-        // Usa biometria (Face ID / Digital)
         const resultado = await LocalAuthentication.authenticateAsync({
           promptMessage: "Confirme sua identidade",
           fallbackLabel: "Usar senha",
@@ -154,16 +188,12 @@ export default function Perfil() {
           );
         }
       } else {
-        // Sem biometria - pede confirmação simples
         Alert.alert(
           "Mostrar dados sensíveis?",
           "Seu dispositivo não tem biometria configurada. Deseja mostrar os dados mesmo assim?",
           [
             { text: "Cancelar", style: "cancel" },
-            {
-              text: "Mostrar",
-              onPress: () => setRevelado(true),
-            },
+            { text: "Mostrar", onPress: () => setRevelado(true) },
           ]
         );
       }
@@ -237,9 +267,7 @@ export default function Perfil() {
             <InfoRow
               label="CPF"
               valor={
-                revelado
-                  ? formatarCPF(motorista?.cpf)
-                  : mascararCPF(motorista?.cpf)
+                revelado ? formatarCPF(motorista?.cpf) : mascararCPF(motorista?.cpf)
               }
               sensivel={!revelado}
               fadeAnim={fadeAnim}
@@ -257,9 +285,7 @@ export default function Perfil() {
             <InfoRow
               label="CNH"
               valor={
-                revelado
-                  ? motorista?.cnh || "-"
-                  : mascararCNH(motorista?.cnh)
+                revelado ? motorista?.cnh || "-" : mascararCNH(motorista?.cnh)
               }
               sensivel={!revelado}
               fadeAnim={fadeAnim}
@@ -267,7 +293,6 @@ export default function Perfil() {
             />
           </View>
 
-          {/* Botão de mostrar/esconder */}
           {!revelado ? (
             <TouchableOpacity
               style={styles.btnMostrar}
@@ -298,12 +323,7 @@ export default function Perfil() {
 
           <TouchableOpacity
             style={styles.opcao}
-            onPress={() =>
-              Alert.alert(
-                "Trocar senha",
-                "Em breve! Por enquanto, peça ao administrador da sua empresa."
-              )
-            }
+            onPress={() => setModalSenha(true)}
             activeOpacity={0.7}
           >
             <View style={styles.opcaoIconeContainer}>
@@ -358,7 +378,347 @@ export default function Perfil() {
 
         <Text style={styles.versao}>Fretta Driver v1.0.0</Text>
       </View>
+
+      {/* Modal trocar senha */}
+      <ModalTrocarSenha
+        visivel={modalSenha}
+        onFechar={() => setModalSenha(false)}
+      />
     </SafeAreaView>
+  );
+}
+
+/* =========================
+   MODAL TROCAR SENHA — VERSÃO CENTRALIZADA
+========================= */
+function ModalTrocarSenha({
+  visivel,
+  onFechar,
+}: {
+  visivel: boolean;
+  onFechar: () => void;
+}) {
+  const [novaSenha, setNovaSenha] = useState("");
+  const [confirmarSenha, setConfirmarSenha] = useState("");
+  const [mostrarNovaSenha, setMostrarNovaSenha] = useState(false);
+  const [mostrarConfirmar, setMostrarConfirmar] = useState(false);
+  const [salvando, setSalvando] = useState(false);
+  const [erro, setErro] = useState("");
+  const [sucesso, setSucesso] = useState(false);
+
+  const scaleAnim = useRef(new Animated.Value(0.9)).current;
+  const opacityAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (visivel) {
+      Animated.parallel([
+        Animated.spring(scaleAnim, {
+          toValue: 1,
+          useNativeDriver: true,
+          tension: 60,
+          friction: 8,
+        }),
+        Animated.timing(opacityAnim, {
+          toValue: 1,
+          duration: 200,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    } else {
+      setNovaSenha("");
+      setConfirmarSenha("");
+      setErro("");
+      setSucesso(false);
+      setMostrarNovaSenha(false);
+      setMostrarConfirmar(false);
+      scaleAnim.setValue(0.9);
+      opacityAnim.setValue(0);
+    }
+  }, [visivel]);
+
+  const fechar = () => {
+    Animated.parallel([
+      Animated.timing(scaleAnim, {
+        toValue: 0.9,
+        duration: 200,
+        useNativeDriver: true,
+      }),
+      Animated.timing(opacityAnim, {
+        toValue: 0,
+        duration: 200,
+        useNativeDriver: true,
+      }),
+    ]).start(() => onFechar());
+  };
+
+  const validar = (): string | null => {
+    if (!novaSenha) return "Digite a nova senha";
+    if (novaSenha.length < 6) return "A senha deve ter no mínimo 6 caracteres";
+    if (novaSenha !== confirmarSenha) return "As senhas não coincidem";
+    return null;
+  };
+
+  const trocarSenha = async () => {
+    setErro("");
+    const erroValidacao = validar();
+    if (erroValidacao) {
+      setErro(erroValidacao);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      return;
+    }
+
+    setSalvando(true);
+    try {
+      const { error } = await supabase.auth.updateUser({
+        password: novaSenha,
+      });
+
+      if (error) {
+        setErro(error.message || "Erro ao alterar senha");
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        setSalvando(false);
+        return;
+      }
+
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      setSucesso(true);
+      setSalvando(false);
+
+      setTimeout(() => {
+        fechar();
+      }, 2000);
+    } catch (err: any) {
+      setErro(err.message || "Erro ao alterar senha");
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      setSalvando(false);
+    }
+  };
+
+  const forcaSenha = (): { texto: string; cor: string; largura: string } => {
+    if (!novaSenha) return { texto: "", cor: colors.border, largura: "0%" };
+    if (novaSenha.length < 6)
+      return { texto: "Muito fraca", cor: colors.danger, largura: "25%" };
+    if (novaSenha.length < 8)
+      return { texto: "Fraca", cor: colors.warning, largura: "50%" };
+    if (novaSenha.length < 12)
+      return { texto: "Boa", cor: "#3B82F6", largura: "75%" };
+    return { texto: "Forte", cor: colors.success, largura: "100%" };
+  };
+
+  const forca = forcaSenha();
+
+  return (
+    <Modal
+      visible={visivel}
+      transparent
+      animationType="none"
+      onRequestClose={fechar}
+      statusBarTranslucent
+    >
+      <Animated.View
+        style={[styles.modalOverlay, { opacity: opacityAnim }]}
+      >
+        <TouchableOpacity
+          style={StyleSheet.absoluteFill}
+          activeOpacity={1}
+          onPress={salvando || sucesso ? undefined : fechar}
+        />
+
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          style={styles.modalWrapper}
+          pointerEvents="box-none"
+        >
+          <Animated.View
+            style={[
+              styles.modalContainer,
+              {
+                transform: [{ scale: scaleAnim }],
+                opacity: opacityAnim,
+              },
+            ]}
+          >
+            {sucesso ? (
+              // ESTADO: SUCESSO
+              <View style={styles.sucessoContainer}>
+                <View style={styles.sucessoIcone}>
+                  <IconeCheckSucesso />
+                </View>
+                <Text style={styles.sucessoTitulo}>Senha alterada!</Text>
+                <Text style={styles.sucessoSubtitulo}>
+                  Sua nova senha já está ativa. Use ela no próximo login.
+                </Text>
+              </View>
+            ) : (
+              // ESTADO: FORMULÁRIO
+              <ScrollView
+                contentContainerStyle={{ padding: 20 }}
+                keyboardShouldPersistTaps="handled"
+                showsVerticalScrollIndicator={false}
+              >
+                {/* Header */}
+                <View style={styles.modalHeader}>
+                  <View style={styles.modalHeaderIcone}>
+                    <IconeChave size={22} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.modalTitulo}>Trocar senha</Text>
+                    <Text style={styles.modalSubtitulo}>
+                      Escolha uma senha forte e segura
+                    </Text>
+                  </View>
+                  <TouchableOpacity
+                    onPress={fechar}
+                    style={styles.btnFechar}
+                    disabled={salvando}
+                  >
+                    <IconeFechar />
+                  </TouchableOpacity>
+                </View>
+
+                {/* Nova senha */}
+                <View style={styles.inputGroup}>
+                  <Text style={styles.inputLabel}>Nova senha</Text>
+                  <View style={styles.inputWrapper}>
+                    <TextInput
+                      style={styles.input}
+                      value={novaSenha}
+                      onChangeText={(v) => {
+                        setNovaSenha(v);
+                        setErro("");
+                      }}
+                      secureTextEntry={!mostrarNovaSenha}
+                      placeholder="Mínimo 6 caracteres"
+                      placeholderTextColor={colors.textMuted}
+                      editable={!salvando}
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                    />
+                    <TouchableOpacity
+                      onPress={() => setMostrarNovaSenha(!mostrarNovaSenha)}
+                      style={styles.btnOlho}
+                    >
+                      <IconeOlho visivel={mostrarNovaSenha} />
+                    </TouchableOpacity>
+                  </View>
+
+                  {novaSenha.length > 0 && (
+                    <View style={styles.forcaContainer}>
+                      <View style={styles.forcaBarraFundo}>
+                        <View
+                          style={[
+                            styles.forcaBarraPreenchida,
+                            {
+                              backgroundColor: forca.cor,
+                              width: forca.largura as any,
+                            },
+                          ]}
+                        />
+                      </View>
+                      <Text style={[styles.forcaTexto, { color: forca.cor }]}>
+                        {forca.texto}
+                      </Text>
+                    </View>
+                  )}
+                </View>
+
+                {/* Confirmar senha */}
+                <View style={styles.inputGroup}>
+                  <Text style={styles.inputLabel}>Confirmar nova senha</Text>
+                  <View style={styles.inputWrapper}>
+                    <TextInput
+                      style={styles.input}
+                      value={confirmarSenha}
+                      onChangeText={(v) => {
+                        setConfirmarSenha(v);
+                        setErro("");
+                      }}
+                      secureTextEntry={!mostrarConfirmar}
+                      placeholder="Digite novamente"
+                      placeholderTextColor={colors.textMuted}
+                      editable={!salvando}
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                    />
+                    <TouchableOpacity
+                      onPress={() => setMostrarConfirmar(!mostrarConfirmar)}
+                      style={styles.btnOlho}
+                    >
+                      <IconeOlho visivel={mostrarConfirmar} />
+                    </TouchableOpacity>
+                  </View>
+
+                  {confirmarSenha.length > 0 && (
+                    <View style={styles.matchContainer}>
+                      <View
+                        style={[
+                          styles.matchPonto,
+                          {
+                            backgroundColor:
+                              novaSenha === confirmarSenha
+                                ? colors.success
+                                : colors.danger,
+                          },
+                        ]}
+                      />
+                      <Text
+                        style={[
+                          styles.matchTexto,
+                          {
+                            color:
+                              novaSenha === confirmarSenha
+                                ? colors.success
+                                : colors.danger,
+                          },
+                        ]}
+                      >
+                        {novaSenha === confirmarSenha
+                          ? "As senhas coincidem"
+                          : "As senhas não coincidem"}
+                      </Text>
+                    </View>
+                  )}
+                </View>
+
+                {erro && (
+                  <View style={styles.erroBox}>
+                    <Text style={styles.erroTexto}>{erro}</Text>
+                  </View>
+                )}
+
+                <View style={styles.modalBotoes}>
+                  <TouchableOpacity
+                    style={styles.btnCancelar}
+                    onPress={fechar}
+                    disabled={salvando}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.btnCancelarTexto}>Cancelar</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[
+                      styles.btnConfirmar,
+                      salvando && styles.btnConfirmarDisabled,
+                    ]}
+                    onPress={trocarSenha}
+                    disabled={salvando}
+                    activeOpacity={0.8}
+                  >
+                    {salvando ? (
+                      <ActivityIndicator color={colors.white} />
+                    ) : (
+                      <Text style={styles.btnConfirmarTexto}>
+                        Alterar senha
+                      </Text>
+                    )}
+                  </TouchableOpacity>
+                </View>
+              </ScrollView>
+            )}
+          </Animated.View>
+        </KeyboardAvoidingView>
+      </Animated.View>
+    </Modal>
   );
 }
 
@@ -379,20 +739,13 @@ function InfoRow({
   ultimo?: boolean;
 }) {
   return (
-    <View
-      style={[
-        styles.infoRow,
-        ultimo && { borderBottomWidth: 0 },
-      ]}
-    >
+    <View style={[styles.infoRow, ultimo && { borderBottomWidth: 0 }]}>
       <Text style={styles.infoLabel}>{label}</Text>
       <Animated.Text
         style={[
           styles.infoValor,
           sensivel && styles.infoValorMascarado,
-          !sensivel && {
-            opacity: fadeAnim,
-          },
+          !sensivel && { opacity: fadeAnim },
         ]}
       >
         {valor}
@@ -515,7 +868,6 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
     letterSpacing: 1,
   },
-
   btnMostrar: {
     marginTop: 12,
     backgroundColor: colors.primary,
@@ -532,7 +884,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "700",
   },
-
   btnEsconder: {
     marginTop: 12,
     backgroundColor: colors.warning,
@@ -549,7 +900,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "700",
   },
-
   opcao: {
     flexDirection: "row",
     alignItems: "center",
@@ -609,5 +959,202 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
     marginTop: "auto",
     paddingVertical: 16,
+  },
+
+  /* 🆕 MODAL CENTRALIZADO */
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+  },
+  modalWrapper: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 20,
+  },
+  modalContainer: {
+    backgroundColor: colors.white,
+    borderRadius: 24,
+    width: "100%",
+    maxWidth: 420,
+    maxHeight: SCREEN_HEIGHT * 0.85,
+    ...shadows.lg,
+  },
+  modalHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    marginBottom: 20,
+  },
+  modalHeaderIcone: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: colors.borderLight,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  modalTitulo: {
+    fontSize: 20,
+    fontWeight: "900",
+    color: colors.textPrimary,
+  },
+  modalSubtitulo: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    marginTop: 2,
+  },
+  btnFechar: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: colors.borderLight,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  inputGroup: {
+    marginBottom: 16,
+  },
+  inputLabel: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: colors.textSecondary,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+    marginBottom: 8,
+  },
+  inputWrapper: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: colors.borderLight,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: "transparent",
+  },
+  input: {
+    flex: 1,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    fontSize: 15,
+    color: colors.textPrimary,
+    fontWeight: "600",
+  },
+  btnOlho: {
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  forcaContainer: {
+    marginTop: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  forcaBarraFundo: {
+    flex: 1,
+    height: 4,
+    backgroundColor: colors.border,
+    borderRadius: 2,
+    overflow: "hidden",
+  },
+  forcaBarraPreenchida: {
+    height: "100%",
+    borderRadius: 2,
+  },
+  forcaTexto: {
+    fontSize: 11,
+    fontWeight: "800",
+    minWidth: 70,
+    textAlign: "right",
+  },
+  matchContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginTop: 8,
+  },
+  matchPonto: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  matchTexto: {
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  erroBox: {
+    backgroundColor: colors.dangerLight,
+    padding: 12,
+    borderRadius: 10,
+    marginBottom: 12,
+    borderLeftWidth: 3,
+    borderLeftColor: colors.danger,
+  },
+  erroTexto: {
+    color: colors.danger,
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  modalBotoes: {
+    flexDirection: "row",
+    gap: 10,
+    marginTop: 8,
+  },
+  btnCancelar: {
+    flex: 1,
+    paddingVertical: 15,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  btnCancelarTexto: {
+    color: colors.textSecondary,
+    fontSize: 15,
+    fontWeight: "700",
+  },
+  btnConfirmar: {
+    flex: 1.5,
+    paddingVertical: 15,
+    borderRadius: 14,
+    backgroundColor: colors.primary,
+    alignItems: "center",
+    justifyContent: "center",
+    ...shadows.md,
+  },
+  btnConfirmarDisabled: {
+    opacity: 0.6,
+  },
+  btnConfirmarTexto: {
+    color: colors.white,
+    fontSize: 15,
+    fontWeight: "800",
+  },
+  sucessoContainer: {
+    alignItems: "center",
+    paddingVertical: 40,
+    paddingHorizontal: 30,
+  },
+  sucessoIcone: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: colors.successLight || "#DCFCE7",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 20,
+  },
+  sucessoTitulo: {
+    fontSize: 22,
+    fontWeight: "900",
+    color: colors.textPrimary,
+    marginBottom: 8,
+  },
+  sucessoSubtitulo: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    textAlign: "center",
+    lineHeight: 20,
+    maxWidth: 300,
   },
 });

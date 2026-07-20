@@ -13,6 +13,8 @@ import { useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Svg, { Path, Circle } from "react-native-svg";
+import BadgeOffline from "../../components/BadgeOffline";
+import StatusSincronizacao from "../../components/StatusSincronizacao";
 import { supabase } from "../../supabase";
 import { useAuth } from "../../contexts/AuthContext";
 import { colors, shadows } from "../../theme/colors";
@@ -31,6 +33,14 @@ interface Rota {
   turnos_atendidos?: string[];
   status_rota?: string;
   horario_saida?: string;
+  linha_id?: string | null; 
+  linhas?: {
+    // 🆕 dados da linha vinculada
+    id: string;
+    nome: string;
+    cor: string;
+    cliente_nome_fantasia?: string;
+  } | null;
 }
 
 /* =========================
@@ -100,6 +110,13 @@ function IconeCronometro({ size = 12, color = colors.textMuted }) {
   );
 }
 
+function IconePredio({ size = 12, color = colors.primary }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill={color}>
+      <Path d="M12 7V3H2v18h20V7H12zM6 19H4v-2h2v2zm0-4H4v-2h2v2zm0-4H4V9h2v2zm0-4H4V5h2v2zm4 12H8v-2h2v2zm0-4H8v-2h2v2zm0-4H8V9h2v2zm0-4H8V5h2v2zm10 12h-8v-2h2v-2h-2v-2h2v-2h-2V9h8v10zm-2-8h-2v2h2v-2zm0 4h-2v2h2v-2z" />
+    </Svg>
+  );
+}
 /* =========================
    HELPERS
 ========================= */
@@ -158,21 +175,26 @@ export default function Home() {
     return () => clearInterval(interval);
   }, []);
 
-  const carregarRotas = useCallback(async () => {
-    const { data, error } = await supabase
-      .from("rotas")
-      .select(
-        "id, nome, cor, distancia_km, duracao_min, pontos_originais, categoria, turno, turnos_atendidos, status_rota, horario_saida"
-      )
-      .or("status_rota.eq.ativa,status_rota.is.null")
-      .order("created_at", { ascending: false });
+ const carregarRotas = useCallback(async () => {
+  const { data, error } = await supabase
+    .from("rotas")
+    .select(
+      `
+      id, nome, cor, distancia_km, duracao_min, pontos_originais,
+      categoria, turno, turnos_atendidos, status_rota, horario_saida,
+      linha_id,
+      linhas ( id, nome, cor, cliente_nome_fantasia )
+      `
+    )
+    .or("status_rota.eq.ativa,status_rota.is.null")
+    .order("created_at", { ascending: false });
 
-    if (!error && data) {
-      setRotas(data as Rota[]);
-    }
-    setLoading(false);
-    setRefreshing(false);
-  }, []);
+  if (!error && data) {
+    setRotas(data as unknown as Rota[]);
+  }
+  setLoading(false);
+  setRefreshing(false);
+}, []);
 
   useEffect(() => {
     carregarRotas();
@@ -207,6 +229,10 @@ export default function Home() {
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
       <StatusBar style="light" />
+
+      <BadgeOffline posicaoTop={50} />
+      <StatusSincronizacao posicaoTop={110} />
+
 
 <View style={styles.header}>
 <HomeHeader
@@ -343,42 +369,64 @@ export default function Home() {
                       <Text style={styles.cardNome} numberOfLines={1}>
                         {item.nome}
                       </Text>
-                      {(item.categoria || item.turno) && (
-                        <View style={styles.tagsRow}>
-                          {item.turno && (
-                            <View
-                              style={[
-                                styles.tag,
-                                ehDoTurnoAtual && styles.tagAtiva,
-                              ]}
-                            >
-                              <Text
-                                style={[
-                                  styles.tagTexto,
-                                  ehDoTurnoAtual && styles.tagTextoAtiva,
-                                ]}
-                              >
-                                {item.turno}
-                              </Text>
-                            </View>
-                          )}
-                          {item.categoria && (
-                            <View style={styles.tag}>
-                              <Text style={styles.tagTexto}>
-                                {item.categoria}
-                              </Text>
-                            </View>
-                          )}
-                          {item.horario_saida && (
-                            <View style={styles.tagHorario}>
-                              <IconeRelogio size={10} color={colors.primary} />
-                              <Text style={styles.tagHorarioTexto}>
-                                {item.horario_saida.slice(0, 5)}
-                              </Text>
-                            </View>
-                          )}
-                        </View>
-                      )}
+{(item.categoria || item.turno || item.linhas || item.horario_saida) && (
+  <View style={styles.tagsRow}>
+    {/* 🆕 Badge da linha (cliente) — sempre primeiro */}
+    {item.linhas && (
+      <View
+        style={[
+          styles.tagLinha,
+          { borderColor: (item.linhas.cor || colors.primary) + "60" },
+          { backgroundColor: (item.linhas.cor || colors.primary) + "15" },
+        ]}
+      >
+        <IconePredio size={10} color={item.linhas.cor || colors.primary} />
+        <Text
+          style={[
+            styles.tagLinhaTexto,
+            { color: item.linhas.cor || colors.primary },
+          ]}
+          numberOfLines={1}
+        >
+          {item.linhas.nome}
+        </Text>
+      </View>
+    )}
+
+    {item.turno && (
+      <View
+        style={[
+          styles.tag,
+          ehDoTurnoAtual && styles.tagAtiva,
+        ]}
+      >
+        <Text
+          style={[
+            styles.tagTexto,
+            ehDoTurnoAtual && styles.tagTextoAtiva,
+          ]}
+        >
+          {item.turno}
+        </Text>
+      </View>
+    )}
+    {item.categoria && (
+      <View style={styles.tag}>
+        <Text style={styles.tagTexto}>
+          {item.categoria}
+        </Text>
+      </View>
+    )}
+    {item.horario_saida && (
+      <View style={styles.tagHorario}>
+        <IconeRelogio size={10} color={colors.primary} />
+        <Text style={styles.tagHorarioTexto}>
+          {item.horario_saida.slice(0, 5)}
+        </Text>
+      </View>
+    )}
+  </View>
+)}
                     </View>
 
                     <View style={styles.setaContainer}>
@@ -734,6 +782,22 @@ filtrosContainer: {
     fontWeight: "800",
     color: colors.primary,
   },
+
+  tagLinha: {
+  flexDirection: "row",
+  alignItems: "center",
+  gap: 4,
+  paddingHorizontal: 8,
+  paddingVertical: 3,
+  borderRadius: 6,
+  borderWidth: 1,
+  maxWidth: 160,
+},
+tagLinhaTexto: {
+  fontSize: 11,
+  fontWeight: "800",
+  letterSpacing: 0.2,
+},
 
   setaContainer: {
     width: 28,

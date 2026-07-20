@@ -5,7 +5,9 @@ import { colors, shadows } from "../theme/colors";
 
 interface AlertaDesvioProps {
   visivel: boolean;
-  distancia?: number;
+  distancia?: number; // distância até a rota
+  distanciaRetorno?: number; // distância da rota de retorno calculada
+  calculandoRota?: boolean;
 }
 
 function IconeAlerta() {
@@ -16,13 +18,27 @@ function IconeAlerta() {
   );
 }
 
-export default function AlertaDesvio({ visivel, distancia }: AlertaDesvioProps) {
+function IconeNavegacao() {
+  return (
+    <Svg width={28} height={28} viewBox="0 0 24 24" fill={colors.white}>
+      <Path d="M12 2L4.5 20.29l.71.71L12 18l6.79 3 .71-.71z" />
+    </Svg>
+  );
+}
+
+export default function AlertaDesvio({
+  visivel,
+  distancia,
+  distanciaRetorno,
+  calculandoRota,
+}: AlertaDesvioProps) {
   const slideAnim = useRef(new Animated.Value(-200)).current;
   const pulseAnim = useRef(new Animated.Value(1)).current;
 
+  const temRotaRetorno = distanciaRetorno && distanciaRetorno > 0;
+
   useEffect(() => {
     if (visivel) {
-      // Desliza pra baixo
       Animated.spring(slideAnim, {
         toValue: 0,
         useNativeDriver: true,
@@ -30,7 +46,6 @@ export default function AlertaDesvio({ visivel, distancia }: AlertaDesvioProps) 
         friction: 8,
       }).start();
 
-      // Pulso contínuo (chama atenção)
       Animated.loop(
         Animated.sequence([
           Animated.timing(pulseAnim, {
@@ -46,7 +61,6 @@ export default function AlertaDesvio({ visivel, distancia }: AlertaDesvioProps) 
         ])
       ).start();
     } else {
-      // Some pra cima
       Animated.timing(slideAnim, {
         toValue: -200,
         duration: 300,
@@ -58,6 +72,11 @@ export default function AlertaDesvio({ visivel, distancia }: AlertaDesvioProps) 
   }, [visivel, slideAnim, pulseAnim]);
 
   if (!visivel) return null;
+
+  const formatarDistancia = (metros: number): string => {
+    if (metros < 1000) return `${Math.round(metros)}m`;
+    return `${(metros / 1000).toFixed(1)}km`;
+  };
 
   return (
     <Animated.View
@@ -71,15 +90,30 @@ export default function AlertaDesvio({ visivel, distancia }: AlertaDesvioProps) 
     >
       <View style={styles.card}>
         <View style={styles.iconeWrapper}>
-          <IconeAlerta />
+          {temRotaRetorno ? <IconeNavegacao /> : <IconeAlerta />}
         </View>
         <View style={{ flex: 1 }}>
-          <Text style={styles.titulo}>Desvio de rota!</Text>
-          <Text style={styles.subtitulo}>
-            {distancia && distancia > 0
-              ? `Você está a ${Math.round(distancia)}m da rota oficial. Retorne ao percurso.`
-              : "Você saiu da rota oficial. Retorne ao percurso."}
-          </Text>
+          {temRotaRetorno ? (
+            <>
+              <Text style={styles.titulo}>Retornando à rota</Text>
+              <Text style={styles.subtitulo}>
+                {formatarDistancia(distanciaRetorno!)} até voltar ao percurso
+              </Text>
+            </>
+          ) : (
+            <>
+              <Text style={styles.titulo}>Desvio de rota!</Text>
+              <Text style={styles.subtitulo}>
+                {calculandoRota
+                  ? "Calculando caminho de retorno..."
+                  : distancia && distancia > 0
+                  ? `Você está a ${Math.round(
+                      distancia
+                    )}m da rota oficial. Retorne ao percurso.`
+                  : "Você saiu da rota oficial. Retorne ao percurso."}
+              </Text>
+            </>
+          )}
         </View>
       </View>
     </Animated.View>
@@ -95,7 +129,7 @@ const styles = StyleSheet.create({
     zIndex: 998,
   },
   card: {
-    backgroundColor: "#DC2626", // vermelho forte
+    backgroundColor: "#DC2626",
     borderRadius: 16,
     padding: 16,
     flexDirection: "row",

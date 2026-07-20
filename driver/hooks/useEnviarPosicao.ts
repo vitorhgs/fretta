@@ -1,5 +1,7 @@
 import { useEffect, useRef } from "react";
 import { supabase } from "../supabase";
+import { useConexao } from "./useConexao";
+import { adicionarPosicaoFila } from "../lib/cacheRota";
 
 interface UseEnviarPosicaoProps {
   latitude: number | null;
@@ -8,13 +10,9 @@ interface UseEnviarPosicaoProps {
   velocidade: number;
   emViagem: boolean;
   viagemId: string | null;
-  intervalo?: number; // ms
+  intervalo?: number;
 }
 
-/**
- * Hook que envia a posição do motorista pro Supabase a cada X segundos.
- * Também envia updates imediatos quando estados-chave mudam.
- */
 export function useEnviarPosicao({
   latitude,
   longitude,
@@ -22,14 +20,37 @@ export function useEnviarPosicao({
   velocidade,
   emViagem,
   viagemId,
-  intervalo = 10000, // 10 segundos default
+  intervalo = 10000,
 }: UseEnviarPosicaoProps) {
+  const { online } = useConexao();
   const intervalRef = useRef<any>(null);
   const ultimoEnvioRef = useRef<number>(0);
+  const onlineRef = useRef(online);
 
-  const enviarPosicao = async () => {
+  // Mantém ref atualizada
+  useEffect(() => {
+    onlineRef.current = online;
+  }, [online]);
+
+  const enviarOuArmazenarPosicao = async () => {
     if (latitude === null || longitude === null) return;
 
+    const dadosPosicao = {
+      latitude,
+      longitude,
+      heading,
+      velocidade_kmh: velocidade,
+      em_viagem: emViagem,
+      viagem_id: viagemId,
+    };
+
+    // 🆕 Se offline, salva na fila SILENCIOSAMENTE
+    if (!onlineRef.current) {
+      await adicionarPosicaoFila(dadosPosicao);
+      return;
+    }
+
+    // Online: tenta enviar
     try {
       const { error } = await supabase.rpc("atualizar_posicao_motorista", {
         p_latitude: latitude,
@@ -41,16 +62,20 @@ export function useEnviarPosicao({
       });
 
       if (error) {
-        console.log("❌ Erro ao enviar posição:", error.message);
+        // Erro do banco (não de rede) — só loga
+        console.log("⚠️ Erro RPC:", error.message);
+        await adicionarPosicaoFila(dadosPosicao);
       } else {
         ultimoEnvioRef.current = Date.now();
       }
-    } catch (err) {
-      console.log("❌ Exceção ao enviar posição:", err);
+    } catch (err: any) {
+      // Erro de rede (mesmo com online=true, pode dar timeout)
+      // Silencioso — apenas adiciona à fila
+      await adicionarPosicaoFila(dadosPosicao);
     }
   };
 
-  // Envia posição em intervalos regulares (só se em viagem)
+  // Intervalo periódico
   useEffect(() => {
     if (intervalRef.current) {
       clearInterval(intervalRef.current);
@@ -58,12 +83,10 @@ export function useEnviarPosicao({
     }
 
     if (emViagem && latitude !== null && longitude !== null) {
-      // Envia imediatamente ao iniciar
-      enviarPosicao();
+      enviarOuArmazenarPosicao();
 
-      // E depois a cada X segundos
       intervalRef.current = setInterval(() => {
-        enviarPosicao();
+        enviarOuArmazenarPosicao();
       }, intervalo);
     }
 
@@ -72,27 +95,33 @@ export function useEnviarPosicao({
     };
   }, [emViagem, viagemId, intervalo]);
 
-  // Envia update imediato quando muda estado importante
+  // Envia update imediato quando muda GPS
   useEffect(() => {
-    // Se está em viagem e passou mais de 3s do último envio, força envio
     if (
       emViagem &&
       latitude !== null &&
       longitude !== null &&
       Date.now() - ultimoEnvioRef.current > 3000
     ) {
-      enviarPosicao();
+      enviarOuArmazenarPosicao();
     }
   }, [latitude, longitude]);
 
-  // Marca como offline ao desmontar
-  useEffect(() => {
-    return () => {
-      supabase.rpc("marcar_motorista_offline").then(() => {
-        console.log("Motorista marcado como offline");
-      });
-    };
-  }, []);
+// Marca como offline ao desmontar (só se estiver online)
+useEffect(() => {
+  return () => {
+    if (onlineRef.current) {
+      // Envolve em async IIFE pra poder usar try/catch
+      (async () => {
+        try {
+          await supabase.rpc("marcar_motorista_offline");
+        } catch {
+          // Silencioso
+        }
+      })();
+    }
+  };
+}, []);
 
-  return { enviarPosicao };
+  return { enviarPosicao: enviarOuArmazenarPosicao };
 }

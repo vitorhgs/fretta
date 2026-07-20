@@ -11,7 +11,13 @@ interface CriarViagemProps {
   distancia_planejada_km: number;
 }
 
+/**
+ * Cria viagem no servidor. Se falhar (offline), retorna ID local.
+ */
 export async function criarViagem(dados: CriarViagemProps): Promise<string | null> {
+  const criarIdLocal = () =>
+    `local_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+
   try {
     const { data, error } = await supabase
       .from("viagens")
@@ -33,15 +39,18 @@ export async function criarViagem(dados: CriarViagemProps): Promise<string | nul
       .single();
 
     if (error) {
-      console.log("❌ Erro ao criar viagem:", error.message);
-      return null;
+      const idTemp = criarIdLocal();
+      console.log("💾 Viagem local (offline):", idTemp);
+      return idTemp;
     }
 
     console.log("✅ Viagem criada:", data.id);
     return data.id;
-  } catch (err) {
-    console.log("❌ Exceção ao criar viagem:", err);
-    return null;
+  } catch {
+    // Silencioso — retorna ID local
+    const idTemp = criarIdLocal();
+    console.log("💾 Viagem local (sem rede):", idTemp);
+    return idTemp;
   }
 }
 
@@ -59,6 +68,9 @@ interface AtualizarViagemProps {
   };
 }
 
+/**
+ * Atualiza viagem no servidor. Se for viagem local ou offline, ignora.
+ */
 export async function atualizarViagem({
   viagem_id,
   paradas_concluidas,
@@ -67,6 +79,11 @@ export async function atualizarViagem({
   velocidade_maxima_kmh,
   trajeto_ponto,
 }: AtualizarViagemProps): Promise<void> {
+  // 🆕 Se for viagem local, não tenta atualizar servidor
+  if (viagem_id.startsWith("local_")) {
+    return;
+  }
+
   try {
     const update: any = {};
 
@@ -79,9 +96,7 @@ export async function atualizarViagem({
     if (velocidade_maxima_kmh !== undefined)
       update.velocidade_maxima_kmh = velocidade_maxima_kmh;
 
-    // Se recebeu trajeto novo, adiciona ao array
     if (trajeto_ponto) {
-      // Busca trajeto atual pra adicionar (não sobrescrever)
       const { data } = await supabase
         .from("viagens")
         .select("trajeto_real")
@@ -99,12 +114,15 @@ export async function atualizarViagem({
       .update(update)
       .eq("id", viagem_id);
 
-    if (error) console.log("❌ Erro ao atualizar viagem:", error.message);
-  } catch (err) {
-    console.log("❌ Exceção ao atualizar viagem:", err);
+    if (error) console.log("⚠️ Erro ao atualizar viagem:", error.message);
+  } catch {
+    // Silencioso — sem rede
   }
 }
 
+/**
+ * Finaliza viagem no servidor. Se for local ou offline, ignora silenciosamente.
+ */
 export async function finalizarViagem(
   viagem_id: string,
   dados: {
@@ -116,6 +134,12 @@ export async function finalizarViagem(
     status?: "concluida" | "cancelada";
   }
 ): Promise<void> {
+  // 🆕 Se for viagem local, não tenta enviar
+  if (viagem_id.startsWith("local_")) {
+    console.log("💾 Viagem local finalizada (será sincronizada depois)");
+    return;
+  }
+
   try {
     const { error } = await supabase
       .from("viagens")
@@ -130,9 +154,9 @@ export async function finalizarViagem(
       })
       .eq("id", viagem_id);
 
-    if (error) console.log("❌ Erro ao finalizar viagem:", error.message);
+    if (error) console.log("⚠️ Erro ao finalizar viagem:", error.message);
     else console.log("✅ Viagem finalizada:", viagem_id);
-  } catch (err) {
-    console.log("❌ Exceção ao finalizar viagem:", err);
+  } catch {
+    // Silencioso — sem rede
   }
 }

@@ -149,6 +149,12 @@ async function salvarDesvio(
   viagemId: string,
   desvio: DesvioAtivo
 ): Promise<void> {
+  // 🆕 Se for viagem local, ignora
+  if (viagemId.startsWith("local_")) {
+    console.log("💾 Desvio registrado localmente (viagem offline)");
+    return;
+  }
+
   try {
     const finalizadoEm = new Date().toISOString();
     const duracaoSegundos = Math.floor(
@@ -164,7 +170,7 @@ async function salvarDesvio(
       .single();
 
     if (fetchError) {
-      console.log("❌ Erro ao buscar desvios:", fetchError.message);
+      // Silencioso
       return;
     }
 
@@ -186,11 +192,11 @@ async function salvarDesvio(
       .eq("id", viagemId);
 
     if (updateError) {
-      console.log("❌ Erro ao salvar desvio:", updateError.message);
+      console.log("⚠️ Erro ao salvar desvio:", updateError.message);
     } else {
       console.log("⚠️ Desvio registrado:", novoDesvio);
     }
-  } catch (err) {
-    console.log("❌ Exceção ao salvar desvio:", err);
+  } catch {
+    // Silencioso — sem rede
   }
 }

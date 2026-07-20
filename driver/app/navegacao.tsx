@@ -28,6 +28,7 @@ import { colors, shadows } from "../theme/colors";
 import { useAuth } from "../contexts/AuthContext";
 import { useEnviarPosicao } from "../hooks/useEnviarPosicao";
 import { useDetectorDesvio } from "../hooks/useDetectorDesvio";
+import { useRotaRetorno } from "../hooks/useRotaRetorno";
 import {
   criarViagem,
   atualizarViagem,
@@ -37,6 +38,10 @@ import MarcadorVeiculo from "../components/MarcadorVeiculo";
 import HUDVelocidade from "../components/HUDVelocidade";
 import ProgressoParadas from "../components/ProgressoParadas";
 import AlertaDesvio from "../components/AlertaDesvio";
+import BadgeOffline from "../components/BadgeOffline";
+import StatusSincronizacao from "../components/StatusSincronizacao";
+import { salvarRotaCache, buscarRotaCache } from "../lib/cacheRota";
+import { useConexao } from "../hooks/useConexao";
 import {
   calcularHeading,
   msParaKmh,
@@ -171,6 +176,8 @@ export default function Navegacao() {
   // 🔋 Mantém a tela acordada durante toda a navegação
   useKeepAwake();
 
+   const { online } = useConexao();
+
   // Auth (tempo real)
   const { motorista } = useAuth();
 
@@ -239,6 +246,14 @@ export default function Navegacao() {
     tolerancia: 50,
   });
 
+  // 🆕 Rota de retorno automática (quando em desvio)
+const rotaRetorno = useRotaRetorno({
+  emDesvio: emDesvio,
+  localizacao: minhaLocalizacao,
+  rotaOficial: normalizarLista(rota?.pontos_snap || []),
+  intervaloRecalculo: 10000, // recalcula a cada 10s
+});
+
   useEffect(() => {
     paradaAtualIdxRef.current = paradaAtualIdx;
   }, [paradaAtualIdx]);
@@ -285,23 +300,55 @@ export default function Navegacao() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const carregarRota = async () => {
-    if (!rotaId) return;
-    const { data, error } = await supabase
-      .from("rotas")
-      .select("*")
-      .eq("id", rotaId as string)
-      .single();
+const carregarRota = async () => {
+  if (!rotaId) return;
 
-    if (error || !data) {
-      Alert.alert("Erro", "Não foi possível carregar a rota");
-      router.back();
+  // 🆕 Se offline, tenta carregar do cache PRIMEIRO
+  if (!online) {
+    const rotaCache = await buscarRotaCache(rotaId as string);
+    if (rotaCache) {
+      console.log("📦 Rota carregada do cache (offline)");
+      setRota(rotaCache as Rota);
+      setCarregando(false);
+      return;
+    }
+    // Sem cache e offline = não tem como
+    Alert.alert(
+      "Sem conexão",
+      "Você está offline e essa rota não foi baixada anteriormente. Conecte-se à internet para acessar."
+    );
+    router.back();
+    return;
+  }
+
+  // Online: busca do servidor
+  const { data, error } = await supabase
+    .from("rotas")
+    .select("*")
+    .eq("id", rotaId as string)
+    .single();
+
+  if (error || !data) {
+    // Se falhou no servidor, tenta cache como fallback
+    const rotaCache = await buscarRotaCache(rotaId as string);
+    if (rotaCache) {
+      console.log("⚠️ Falha no servidor, usando cache");
+      setRota(rotaCache as Rota);
+      setCarregando(false);
       return;
     }
 
-    setRota(data as Rota);
-    setCarregando(false);
-  };
+    Alert.alert("Erro", "Não foi possível carregar a rota");
+    router.back();
+    return;
+  }
+
+  setRota(data as Rota);
+  setCarregando(false);
+
+  // 🆕 Salva no cache pra usar offline depois
+  await salvarRotaCache(data);
+};
 
   /* =====================================================
      TOAST
@@ -425,20 +472,33 @@ export default function Navegacao() {
     }
   };
 
-  const buscarEndereco = async (lat: number, lng: number) => {
-    try {
-      const res = await fetch(
-        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`
-      );
-      const data = await res.json();
-      const a = data.address || {};
-      const rua = a.road || a.pedestrian || "Rua sem nome";
-      const numero = a.house_number ? `, ${a.house_number}` : "";
-      setEnderecoAtual(`${rua}${numero}`);
-    } catch {
-      setEnderecoAtual("");
-    }
-  };
+const buscarEndereco = async (lat: number, lng: number) => {
+  // 🆕 Só busca endereço se estiver online
+  if (!online) {
+    setEnderecoAtual("");
+    return;
+  }
+
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
+
+    const res = await fetch(
+      `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`,
+      { signal: controller.signal }
+    );
+    clearTimeout(timeoutId);
+
+    const data = await res.json();
+    const a = data.address || {};
+    const rua = a.road || a.pedestrian || "Rua sem nome";
+    const numero = a.house_number ? `, ${a.house_number}` : "";
+    setEnderecoAtual(`${rua}${numero}`);
+  } catch {
+    // Silencioso: falha de rede é esperado offline
+    setEnderecoAtual("");
+  }
+};
 
   /* =====================================================
      PARADAS - detecção automática
@@ -817,6 +877,33 @@ export default function Navegacao() {
           </>
         )}
 
+        {/* 🆕 Rota de retorno (linha vermelha tracejada) */}
+{emDesvio && rotaRetorno.pontos.length > 0 && (
+  <>
+    {/* Sombra */}
+    <Polyline
+      coordinates={rotaRetorno.pontos}
+      strokeColor="rgba(0,0,0,0.3)"
+      strokeWidth={10}
+      lineDashPattern={[15, 10]}
+    />
+    {/* Linha vermelha principal */}
+    <Polyline
+      coordinates={rotaRetorno.pontos}
+      strokeColor="#DC2626"
+      strokeWidth={6}
+      lineDashPattern={[15, 10]}
+    />
+    {/* Highlight branco */}
+    <Polyline
+      coordinates={rotaRetorno.pontos}
+      strokeColor="rgba(255,255,255,0.5)"
+      strokeWidth={2}
+      lineDashPattern={[15, 10]}
+    />
+  </>
+)}
+
         {paradasNormalizadas.map((p, i) => {
           const concluida = paradasConcluidas.has(i);
           const ehAtual = i === paradaAtualIdx && emViagem && !concluida;
@@ -915,7 +1002,15 @@ export default function Navegacao() {
       )}
 
       {/* ALERTA DE DESVIO */}
-      <AlertaDesvio visivel={emDesvio} distancia={distanciaAtual} />
+<AlertaDesvio
+  visivel={emDesvio}
+  distancia={distanciaAtual}
+  distanciaRetorno={rotaRetorno.distanciaMetros}
+  calculandoRota={rotaRetorno.calculando}
+/>
+
+      <BadgeOffline posicaoTop={110} />
+      <StatusSincronizacao posicaoTop={170} />
 
       {/* HUD VELOCIDADE (some quando card está aberto) */}
 <       View style={styles.hudContainer}>
@@ -935,6 +1030,19 @@ export default function Navegacao() {
     <IconeRecentralizar />
   </TouchableOpacity>
 )}
+
+<BotaoSOS
+  visivel={emViagem && !cardAberto}
+  motoristaId={motorista?.id || ""}
+  empresaId={motorista?.empresa_id || ""}
+  motoristaNome={motorista?.nome || ""}
+  viagemId={viagemId}
+  rotaNome={rota.nome}
+  latitude={minhaLocalizacao?.latitude ?? null}
+  longitude={minhaLocalizacao?.longitude ?? null}
+  velocidade={velocidade}
+/>
+
 
       
 

@@ -32,7 +32,7 @@ interface BotaoSOSProps {
 ========================= */
 function IconeSOS() {
   return (
-    <Svg width={26} height={26} viewBox="0 0 24 24" fill={colors.white}>
+    <Svg width={20} height={20} viewBox="0 0 24 24" fill={colors.white}>
       <Path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z" />
     </Svg>
   );
@@ -94,8 +94,8 @@ export default function BotaoSOS({
       Animated.loop(
         Animated.sequence([
           Animated.timing(pulseAnim, {
-            toValue: 1.08,
-            duration: 1200,
+            toValue: 1.04,
+            duration: 1800,
             useNativeDriver: true,
           }),
           Animated.timing(pulseAnim, {
@@ -356,28 +356,28 @@ const styles = StyleSheet.create({
     
 container: {
   position: "absolute",
-  right: 16,
-  bottom: 420, // 👈 posição fixa acima do card
+  right: 14,
+  top: 180, // logo abaixo do header
   zIndex: 20,
 },
-  botao: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: "#DC2626",
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 3,
-    borderColor: "rgba(255,255,255,0.9)",
-    ...shadows.lg,
-  },
-  botaoTexto: {
-    color: colors.white,
-    fontSize: 9,
-    fontWeight: "900",
-    letterSpacing: 0.5,
-    marginTop: -2,
-  },
+botao: {
+  width: 46,
+  height: 46,
+  borderRadius: 23,
+  backgroundColor: "#DC2626",
+  alignItems: "center",
+  justifyContent: "center",
+  borderWidth: 2.5,
+  borderColor: "rgba(255,255,255,0.95)",
+  ...shadows.lg,
+},
+botaoTexto: {
+  color: colors.white,
+  fontSize: 8,
+  fontWeight: "900",
+  letterSpacing: 0.5,
+  marginTop: -1,
+},
 
   // Modal
   overlay: {
