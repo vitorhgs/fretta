@@ -512,91 +512,97 @@ function Rotas() {
     carregarRotas();
   };
 
-  const snapAutomatico = async () => {
-    setCalculando(true);
-    const coords = pontos.map((p: any) => {
+const snapAutomatico = async () => {
+  setCalculando(true);
+  const coords = pontos.map((p: any) => {
+    const arr = Array.isArray(p) ? p : [p.lat, p.lng];
+    return [arr[1], arr[0]]; // OSRM usa [lng, lat]
+  });
+
+  try {
+    // 🆕 Usa OSRM público (funciona em produção)
+    const coordsStr = coords
+      .map((c: number[]) => `${c[0]},${c[1]}`)
+      .join(";");
+    const url = `https://router.project-osrm.org/route/v1/driving/${coordsStr}?overview=full&geometries=geojson`;
+
+    const response = await fetch(url);
+    if (!response.ok) throw new Error("OSRM indisponível");
+    const data = await response.json();
+    if (!data.routes || !data.routes[0]) throw new Error("Resposta inválida");
+
+    const geometry = data.routes[0].geometry.coordinates;
+    const summary = data.routes[0];
+    const novaRota: LatLngExpression[] = geometry.map((c: number[]) => [
+      c[1],
+      c[0],
+    ]);
+
+    setDistancia(summary.distance / 1000);
+    setDuracao(summary.duration / 60);
+    animarRotaIncremental(novaRota);
+  } catch {
+    // Fallback: linha reta se OSRM público falhar
+    const novaRota: LatLngExpression[] = pontos.map((p: any) => {
       const arr = Array.isArray(p) ? p : [p.lat, p.lng];
-      return [arr[1], arr[0]];
+      return [arr[0], arr[1]];
     });
-
-    try {
-      const response = await fetch("http://localhost:3001/rota", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ coordinates: coords }),
-      });
-      if (!response.ok) throw new Error("Backend indisponível");
-      const data = await response.json();
-      if (!data.routes || !data.routes[0]) throw new Error("Resposta inválida");
-
-      const geometry = data.routes[0].geometry.coordinates;
-      const summary = data.routes[0];
-      const novaRota: LatLngExpression[] = geometry.map((c: number[]) => [
-        c[1],
-        c[0],
-      ]);
-
-      setDistancia(summary.distance / 1000);
-      setDuracao(summary.duration / 60);
-      animarRotaIncremental(novaRota);
-    } catch {
-      const novaRota: LatLngExpression[] = pontos.map((p: any) => {
-        const arr = Array.isArray(p) ? p : [p.lat, p.lng];
-        return [arr[0], arr[1]];
-      });
-      let distTotal = 0;
-      for (let i = 1; i < novaRota.length; i++) {
-        distTotal += distanciaEntre(novaRota[i - 1], novaRota[i]);
-      }
-      setDistancia(distTotal);
-      setDuracao((distTotal / 40) * 60);
-      animarRotaIncremental(novaRota);
-    } finally {
-      setCalculando(false);
+    let distTotal = 0;
+    for (let i = 1; i < novaRota.length; i++) {
+      distTotal += distanciaEntre(novaRota[i - 1], novaRota[i]);
     }
-  };
+    setDistancia(distTotal);
+    setDuracao((distTotal / 40) * 60);
+    animarRotaIncremental(novaRota);
+  } finally {
+    setCalculando(false);
+  }
+};
 
-  const recalcularInvertido = async (rota: RotaSalva) => {
-    setCalculando(true);
-    const pontosInvertidos = [...rota.pontos_originais].reverse();
-    const coords = pontosInvertidos.map((p: any) => {
-      const arr = Array.isArray(p) ? p : [p.lat, p.lng];
-      return [arr[1], arr[0]];
-    });
+const recalcularInvertido = async (rota: RotaSalva) => {
+  setCalculando(true);
+  const pontosInvertidos = [...rota.pontos_originais].reverse();
+  const coords = pontosInvertidos.map((p: any) => {
+    const arr = Array.isArray(p) ? p : [p.lat, p.lng];
+    return [arr[1], arr[0]];
+  });
 
-    try {
-      const response = await fetch("http://localhost:3001/rota", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ coordinates: coords }),
-      });
-      if (!response.ok) throw new Error("Backend offline");
-      const data = await response.json();
-      if (!data.routes || !data.routes[0]) throw new Error("Resposta inválida");
+  try {
+    // 🆕 Usa OSRM público
+    const coordsStr = coords
+      .map((c: number[]) => `${c[0]},${c[1]}`)
+      .join(";");
+    const url = `https://router.project-osrm.org/route/v1/driving/${coordsStr}?overview=full&geometries=geojson`;
 
-      const geometry = data.routes[0].geometry.coordinates;
-      const summary = data.routes[0];
-      const novaRota: LatLngExpression[] = geometry.map((c: number[]) => [
-        c[1],
-        c[0],
-      ]);
+    const response = await fetch(url);
+    if (!response.ok) throw new Error("OSRM indisponível");
+    const data = await response.json();
+    if (!data.routes || !data.routes[0]) throw new Error("Resposta inválida");
 
-      setDistancia(summary.distance / 1000);
-      setDuracao(summary.duration / 60);
-      animarRotaCompleta(novaRota);
-    } catch {
-      const invertida = [...normalizarLista(rota.pontos_snap)].reverse();
-      let distTotal = 0;
-      for (let i = 1; i < invertida.length; i++) {
-        distTotal += distanciaEntre(invertida[i - 1], invertida[i]);
-      }
-      setDistancia(distTotal);
-      setDuracao((distTotal / 40) * 60);
-      animarRotaCompleta(invertida);
-    } finally {
-      setCalculando(false);
+    const geometry = data.routes[0].geometry.coordinates;
+    const summary = data.routes[0];
+    const novaRota: LatLngExpression[] = geometry.map((c: number[]) => [
+      c[1],
+      c[0],
+    ]);
+
+    setDistancia(summary.distance / 1000);
+    setDuracao(summary.duration / 60);
+    animarRotaCompleta(novaRota);
+  } catch {
+    // Fallback: linha reta invertida
+    const invertida = [...normalizarLista(rota.pontos_snap)].reverse();
+    let distTotal = 0;
+    for (let i = 1; i < invertida.length; i++) {
+      distTotal += distanciaEntre(invertida[i - 1], invertida[i]);
     }
-  };
+    setDistancia(distTotal);
+    setDuracao((distTotal / 40) * 60);
+    animarRotaCompleta(invertida);
+  } finally {
+    setCalculando(false);
+  }
+};
 
   const alternarSentido = () => {
     if (!rotaSelecionada) return;

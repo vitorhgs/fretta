@@ -187,7 +187,7 @@ export default function NotificacoesPopover() {
 
       {/* Popover */}
       {aberto && (
-        <div className="absolute right-0 top-12 z-[100] w-[380px] bg-white border border-slate-200 rounded-2xl shadow-2xl overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
+        <div className="absolute right-0 top-12 z-[9999] w-[380px] bg-white border border-slate-200 rounded-2xl shadow-2xl overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
           {/* Header */}
           <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between bg-gradient-to-r from-slate-50 to-white">
             <div className="flex items-center gap-2">

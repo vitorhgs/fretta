@@ -64,7 +64,7 @@ export default function AvatarMenu() {
       </button>
 
       {aberto && (
-        <div className="absolute right-0 top-14 z-50 bg-white border border-slate-200 rounded-2xl shadow-2xl overflow-hidden min-w-[280px] animate-in fade-in slide-in-from-top-2 duration-200">
+        <div className="absolute right-0 top-14 z-[9999] bg-white border border-slate-200 rounded-2xl shadow-2xl overflow-hidden min-w-[280px] animate-in fade-in slide-in-from-top-2 duration-200">
           {/* Cabeçalho */}
           <div className="p-4 border-b border-slate-100 bg-gradient-to-br from-slate-50 to-blue-50/30">
             <div className="flex items-center gap-3">
